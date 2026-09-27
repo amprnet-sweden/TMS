@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: tms
+  liquibase:
+    default-schema: tms
+    liquibase-schema: tms
+  cache:
+    cache-names: "users,groups,roles"
+    caffeine:
+      spec: "maximumSize=500,expireAfterWrite=60s"

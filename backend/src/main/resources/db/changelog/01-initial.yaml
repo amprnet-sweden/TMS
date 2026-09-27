@@ -1,0 +1,424 @@
+databaseChangeLog:
+  - changeSet:
+      id: cm26ke8a
+      author: goeh
+      labels: metadata
+      comment: Incident priority
+      changes:
+        - createTable:
+            tableName: incident_priority
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: icon
+                  type: varchar(80)
+              - column:
+                  name: color
+                  type: varchar(80)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+
+  - changeSet:
+      id: cm26ki01
+      author: goeh
+      labels: metadata
+      comment: Incident status
+      changes:
+        - createTable:
+            tableName: incident_status
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: icon
+                  type: varchar(80)
+              - column:
+                  name: color
+                  type: varchar(80)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+
+  - changeSet:
+      id: cm26kj84
+      author: goeh
+      labels: metadata
+      comment: Service type
+      changes:
+        - createTable:
+            tableName: service_type
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: icon
+                  type: varchar(80)
+              - column:
+                  name: color
+                  type: varchar(80)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+              - column:
+                  name: create_roles
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: read_roles
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: update_roles
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: delete_roles
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: cm26klxg
+      author: goeh
+      labels: incident
+      comment: Incident
+      changes:
+        - createTable:
+            tableName: incident
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: varchar(8000)
+              - column:
+                  name: latitude
+                  type: double
+              - column:
+                  name: longitude
+                  type: double
+              - column:
+                  name: service_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: priority_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(36)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: assigned_to
+                  type: varchar(36)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+
+
+  - changeSet:
+      id: cm26ks3j
+      author: goeh
+      labels: incident
+      comment: Comment
+      changes:
+        - createTable:
+            tableName: comment
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: incident_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: varchar(36)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: text
+                  type: varchar(8000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+  - changeSet:
+      id: 73l86g85
+      author: goeh
+      labels: auth
+      comment: Unique name
+      changes:
+        - addUniqueConstraint:
+            constraintName: incident_priority_name
+            tableName: incident_priority
+            columnNames: mission_id, name
+  - changeSet:
+      id: y5y3tmrl
+      author: goeh
+      labels: auth
+      comment: Unique name
+      changes:
+        - addUniqueConstraint:
+            constraintName: incident_status_name
+            tableName: incident_status
+            columnNames: mission_id, name
+  - changeSet:
+      id: 7payfq9g
+      author: goeh
+      labels: auth
+      comment: Unique name
+      changes:
+        - addUniqueConstraint:
+            constraintName: service_type_name
+            tableName: service_type
+            columnNames: mission_id, name
+  - changeSet:
+      id: ejrn11rs
+      author: goeh
+      labels: auth
+      comment: Foreign key constraints
+      changes:
+        - addForeignKeyConstraint:
+            constraintName: cm4r9chh0000mbm027ojph15v
+            baseTableName: comment
+            baseColumnNames: incident_id
+            referencedTableName: incident
+            referencedColumnNames: id
+            deleteCascade: true
+        - addForeignKeyConstraint:
+            constraintName: cm4r9eylo000nbm02tn2dtzwo
+            baseTableName: incident
+            baseColumnNames: service_id
+            referencedTableName: service_type
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            constraintName: cm4r9g781000obm02m43hhazb
+            baseTableName: incident
+            baseColumnNames: status_id
+            referencedTableName: incident_status
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            constraintName: cm4r9gagd000pbm02u3klb0wa
+            baseTableName: incident
+            baseColumnNames: priority_id
+            referencedTableName: incident_priority
+            referencedColumnNames: id
+
+  - changeSet:
+      id: kqwp2ajk
+      author: goeh
+      labels: mission
+      comment: Add mission table
+      changes:
+        - createTable:
+            tableName: mission
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: varchar(4000)
+              - column:
+                  name: status
+                  type: varchar(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: icon
+                  type: varchar(80)
+              - column:
+                  name: color
+                  type: varchar(80)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+
+        - addUniqueConstraint:
+            constraintName: mission_name
+            tableName: mission
+            columnNames: name
+
+        - createTable:
+            tableName: mission_member
+            columns:
+              - column:
+                  name: id
+                  type: char(24)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mission_id
+                  type: char(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sub
+                  type: varchar(36)
+              - column:
+                  name: role
+                  type: varchar(20)
+              - column:
+                  name: ctime
+                  type: datetime
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mtime
+                  type: datetime
+
+        - addUniqueConstraint:
+            constraintName: mission_member_rel
+            tableName: mission_member
+            columnNames: mission_id, sub

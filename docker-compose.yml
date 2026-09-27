@@ -1,0 +1,92 @@
+networks:
+  tms:
+    driver: bridge
+
+services:
+  #nginx:
+  #  build: ./docker/nginx
+  #  #image: nginx:1.29.3
+  #  ports:
+  #    - "9003:9003"
+  #  networks:
+  #    - tms
+
+  mariadb:
+    image: mariadb:10.11.15
+    environment:
+      MYSQL_DATABASE: tms
+      #MYSQL_USER: test
+      #MYSQL_PASSWORD: test
+      MARIADB_ROOT_USER: root
+      MYSQL_ROOT_PASSWORD: ""
+      MYSQL_ALLOW_EMPTY_PASSWORD: yes
+    networks:
+      - tms
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.7
+    restart: on-failure
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: mariadb
+      KC_DB_URL: jdbc:mariadb://mariadb:3306/tms
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: ""
+      KC_DB_URL_HOST: "mariadb"
+      KC_CACHE: local
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+    ports:
+      - "8088:8080"
+    command:
+      - start
+      - --import-realm
+      - --verbose
+    volumes:
+      - ./docker/keycloak/amprnet-realm.json:/opt/keycloak/data/import/amprnet-realm.json:ro
+    depends_on:
+      - mariadb
+    networks:
+      - tms
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  tms-backend:
+    #build: ./backend
+    image: ghcr.io/amprnet-sweden/tms-backend:latest
+    command:
+     - "-trustca"
+     - "/opt/tms/app.jar"
+    restart: on-failure
+    environment:
+      TZ: Europe/Stockholm
+      JAVA_OPTS: -Xms150m -Xmx150m -Dspring.profiles.active=docker
+    volumes:
+      - ./docker/certs/ca.crt:/opt/tms/certs/ca.crt:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mariadb
+      - keycloak
+    networks:
+      - tms
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  tms-frontend:
+    build: ./frontend
+    #image: ghcr.io/amprnet-sweden/tms-frontend:latest
+    ports:
+      - "9003:9003"
+    volumes:
+      - ./docker/certs/ca.crt:/etc/nginx/certs/ca.crt:ro
+      - ./docker/certs/public.crt:/etc/nginx/certs/public.crt:ro
+      - ./docker/certs/private.key:/etc/nginx/certs/private.key:ro
+#      - ./frontend/dist:/usr/share/nginx/html/tms:ro
+    networks:
+      - tms
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

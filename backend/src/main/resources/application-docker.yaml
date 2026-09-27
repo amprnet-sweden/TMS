@@ -1,0 +1,40 @@
+---
+server:
+  port: 8080
+spring:
+  application:
+    name: tms
+  data:
+    jdbc:
+      dialect: mysql
+      #dialect: h2
+  datasource:
+    url: jdbc:mariadb://mariadb:3306/tms
+    username: root
+    password: ""
+    driver-class-name: org.mariadb.jdbc.Driver
+    #url: jdbc:h2:mem:testdb;CASE_INSENSITIVE_IDENTIFIERS=TRUE;INIT=CREATE SCHEMA IF NOT EXISTS tms\;SET SCHEMA tms;
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://host.docker.internal:9003/auth/realms/amprnet
+          jwk-set-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs"
+        #opaque-token:
+        #  introspection-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/token/introspect"
+        #  client-id: tms-backend
+        #  client-secret: ${CLIENT_SECRET}
+tms:
+  allowed-origins:
+    - https://localhost:9003
+    - https://host.docker.internal:9003
+    - http://localhost:8080
+    - https://tms.amprnet.se
+  demo: true
+  tenant: ${TENANT}
+
+keycloak:
+  uri: https://host.docker.internal:9003/auth
+  realm: amprnet
+  username: admin-cli
+  password: hemligt
