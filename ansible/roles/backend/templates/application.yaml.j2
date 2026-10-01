@@ -1,0 +1,53 @@
+server:
+  address: 127.0.0.1
+  port: 8080
+spring:
+  application:
+    name: tms
+  data:
+    jdbc:
+      dialect: mysql
+  datasource:
+    url: jdbc:mariadb://127.0.0.1:3306/tms
+    username: tms
+    password: ${TMS_DATABASE_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    default-schema: tms
+    liquibase-schema: tms
+  cache:
+    cache-names: users,groups,roles
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: {{ tms_public_origin }}/auth/realms/amprnet
+          jwk-set-uri: {{ tms_public_origin }}/auth/realms/amprnet/protocol/openid-connect/certs
+keycloak:
+  uri: {{ tms_public_origin }}/auth
+  realm: amprnet
+  client-id: admin-cli
+  username: admin-cli
+  password: ${TMS_KEYCLOAK_LOOKUP_PASSWORD}
+tms:
+  allowed-origins:
+    - {{ tms_public_origin }}
+  demo: false
+  tenant: "{{ tms_tenant }}"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+logging:
+  level:
+    root: INFO
+    se.amprnet.tms: INFO
+    org.springframework.security: INFO
+    org.springframework.web.socket: INFO

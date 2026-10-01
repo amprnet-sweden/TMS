@@ -1,0 +1,21 @@
+---
+- name: Check the target
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Serve the built frontend over HTTPS
+  hosts: tms
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/build.yml
+  pre_tasks:
+    - name: Require the HTTPS endpoint and prepared certificates
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - tms_public_origin is match('^https://')
+          - tms_tls_source_directory is defined
+          - tms_tls_ca_sha256 is match('^[a-f0-9]{64}$')
+        fail_msg: Run install.sh to prepare certificates and deployment variables.
+  roles:
+    - frontend_proxy

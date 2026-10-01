@@ -1,0 +1,30 @@
+---
+- name: Check the native installation target
+  hosts: tms
+  gather_facts: true
+  tasks:
+    - name: Require the selected operating system and architecture
+      ansible.builtin.assert:
+        that:
+          - groups['tms'] | length == 1
+          - ansible_facts['distribution'] == 'Debian'
+          - ansible_facts['distribution_major_version'] == '13'
+          - ansible_facts['architecture'] == 'aarch64'
+          - ansible_facts['memtotal_mb'] >= 3500
+        fail_msg: This installer requires Debian 13 ARM64 with approximately 4 GiB RAM.
+
+    - name: Verify privilege escalation without changing the guest
+      ansible.builtin.command: /usr/bin/id -u
+      become: true
+      register: privileged_identity
+      changed_when: false
+      failed_when: privileged_identity.stdout != '0'
+      check_mode: false
+
+    - name: Report the verified target
+      ansible.builtin.debug:
+        msg: >-
+          SSH, Python and sudo work on {{ ansible_facts['hostname'] }}:
+          {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }},
+          {{ ansible_facts['architecture'] }}, {{ ansible_facts['memtotal_mb'] }} MiB RAM.
+          This preflight check did not install packages or services.

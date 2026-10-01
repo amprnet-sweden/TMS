@@ -1,0 +1,337 @@
+---
+- name: Read the database deployment identity
+  ansible.builtin.slurp:
+    src: /etc/tms/database-owner.json
+  register: keycloak_database_owner
+
+- name: Require the same vault as the database stage
+  ansible.builtin.assert:
+    that:
+      - (keycloak_database_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+
+- name: Inspect prerequisites and existing Keycloak paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/tms/database-ready
+    - /etc/tms/https-ca.sha256
+    - /etc/tms/keycloak-owner.json
+    - /opt/keycloak
+    - /etc/systemd/system/tms-keycloak.service
+    - /etc/tms/keycloak-ready
+  register: keycloak_paths
+
+- name: Inspect the existing Keycloak account
+  ansible.builtin.getent:
+    database: passwd
+    key: keycloak
+    fail_key: false
+
+- name: Require completed prerequisites and refuse unmanaged Keycloak
+  ansible.builtin.assert:
+    that:
+      - keycloak_paths.results[0].stat.exists
+      - keycloak_paths.results[1].stat.exists
+      - >-
+        keycloak_paths.results[2].stat.exists or
+        (not keycloak_paths.results[3].stat.exists and not keycloak_paths.results[4].stat.exists
+         and not ansible_facts.getent_passwd.keycloak)
+    fail_msg: Complete database and HTTPS stages first. Existing unmanaged Keycloak requires a separate migration.
+
+- name: Read the existing Keycloak ownership record
+  ansible.builtin.slurp:
+    src: /etc/tms/keycloak-owner.json
+  register: keycloak_owner
+  when: keycloak_paths.results[2].stat.exists
+
+- name: Reject vault replacement and implicit Keycloak upgrades
+  ansible.builtin.assert:
+    that:
+      - (keycloak_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - (keycloak_owner.content | b64decode | from_json).version == tms_keycloak_version
+    fail_msg: Restore the original vault. Version upgrades require a separate backup and migration procedure.
+  when: keycloak_paths.results[2].stat.exists
+
+- name: Inspect the database before claiming a fresh installation
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: ''
+    query: SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = 'keycloak'
+  register: keycloak_database_tables
+  when: not keycloak_paths.results[2].stat.exists
+
+- name: Require an empty database for the first installation
+  ansible.builtin.assert:
+    that:
+      - keycloak_database_tables.query_result[0][0].table_count | int == 0
+    fail_msg: Refusing to adopt an existing Keycloak database.
+  when: not keycloak_paths.results[2].stat.exists
+
+- name: Record ownership before provisioning to allow interrupted runs to resume
+  ansible.builtin.copy:
+    dest: /etc/tms/keycloak-owner.json
+    content: "{{ {'deployment_id': tms_database_deployment_id, 'version': tms_keycloak_version} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Create the Keycloak group
+  ansible.builtin.group:
+    name: keycloak
+    system: true
+
+- name: Create the unprivileged Keycloak account
+  ansible.builtin.user:
+    name: keycloak
+    group: keycloak
+    system: true
+    home: "{{ tms_keycloak_home }}/data"
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create root-owned installation and helper directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/keycloak
+    - /usr/local/lib/tms-ansible
+
+- name: Download the pinned Keycloak distribution and verify its checksum
+  ansible.builtin.get_url:
+    url: "https://github.com/keycloak/keycloak/releases/download/{{ tms_keycloak_version }}/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    dest: "/var/cache/tms-build/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    checksum: "sha256:{{ tms_keycloak_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+    timeout: 120
+
+- name: Extract the root-owned Keycloak distribution
+  ansible.builtin.unarchive:
+    src: "/var/cache/tms-build/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    dest: /opt/keycloak
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ tms_keycloak_home }}/bin/kc.sh"
+
+- name: Derive the completion marker from the runtime build inputs
+  ansible.builtin.set_fact:
+    keycloak_build_marker: >-
+      {{ tms_keycloak_home }}/.tms-build-{{
+      ([tms_keycloak_sha256, tms_java_home] + tms_keycloak_build_arguments) | to_json | hash('sha256') }}
+
+- name: Inspect completion of the required runtime build
+  ansible.builtin.stat:
+    path: "{{ keycloak_build_marker }}"
+  register: keycloak_build_completion
+
+- name: Stop the existing service before rebuilding its runtime
+  ansible.builtin.systemd_service:
+    name: tms-keycloak
+    state: stopped
+  when:
+    - not keycloak_build_completion.stat.exists
+    - keycloak_paths.results[4].stat.exists
+
+- name: Build the optimized MariaDB runtime with Java 21
+  ansible.builtin.command:
+    argv: "{{ [tms_keycloak_home + '/bin/kc.sh'] + tms_keycloak_build_arguments }}"
+    creates: "{{ keycloak_build_marker }}"
+  environment:
+    JAVA_HOME: "{{ tms_java_home }}"
+  async: 1800
+  poll: 15
+  register: keycloak_build
+  notify: Restart Keycloak
+
+- name: Record successful runtime optimization
+  ansible.builtin.copy:
+    dest: "{{ keycloak_build_marker }}"
+    content: "{{ tms_keycloak_build_arguments | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create writable data and gzip cache directories
+  ansible.builtin.file:
+    path: "{{ tms_keycloak_home }}/{{ item }}"
+    state: directory
+    owner: keycloak
+    group: keycloak
+    mode: '0750'
+  loop:
+    - data
+    - data/tmp
+
+- name: Configure Keycloak behind the local HTTPS proxy
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: "{{ tms_keycloak_home }}/conf/keycloak.conf"
+    owner: root
+    group: keycloak
+    mode: '0640'
+  notify: Restart Keycloak
+
+- name: Install the root-readable database environment
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: /etc/tms/keycloak.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Restart Keycloak
+
+- name: Supply temporary bootstrap credentials until setup completes
+  ansible.builtin.template:
+    src: bootstrap.env.j2
+    dest: /etc/tms/keycloak-bootstrap.env
+    owner: root
+    group: root
+    mode: '0600'
+  when: not keycloak_paths.results[5].stat.exists
+  no_log: true
+  diff: false
+  notify: Restart Keycloak
+
+- name: Install the Keycloak service
+  ansible.builtin.template:
+    src: tms-keycloak.service.j2
+    dest: /etc/systemd/system/tms-keycloak.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Keycloak
+
+- name: Apply pending Keycloak changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable Keycloak at boot and ensure it is running
+  ansible.builtin.systemd_service:
+    name: tms-keycloak
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for Keycloak through verified HTTPS
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/auth/realms/master/.well-known/openid-configuration"
+    ca_path: /etc/tms/tls/ca.crt
+    validate_certs: true
+    use_proxy: false
+    timeout: 30
+  register: keycloak_startup
+  until: keycloak_startup.status == 200
+  retries: 120
+  delay: 10
+
+- name: Require the correct public path before identity provisioning
+  ansible.builtin.assert:
+    that:
+      - keycloak_startup.json.issuer == tms_public_origin + tms_keycloak_http_relative_path + '/realms/master'
+      - >-
+        keycloak_startup.json.authorization_endpoint ==
+        tms_public_origin + tms_keycloak_http_relative_path + '/realms/master/protocol/openid-connect/auth'
+    fail_msg: Keycloak must advertise the canonical HTTPS origin including its /auth path.
+
+- name: Install the identity reconciliation helper and source realm
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/lib/tms-ansible/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - src: configure-keycloak.py
+      dest: configure-keycloak.py
+    - src: "{{ playbook_dir }}/../docker/keycloak/amprnet-realm.json"
+      dest: amprnet-realm.json
+
+- name: Reconcile identities and verify account permissions and compressed admin assets
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/lib/tms-ansible/configure-keycloak.py
+      - /usr/local/lib/tms-ansible/amprnet-realm.json
+    stdin: >-
+      {{ {'origin': tms_public_origin, 'deployment_id': tms_database_deployment_id,
+          'bootstrap_user': tms_keycloak_bootstrap_user, 'bootstrap_password': tms_keycloak_bootstrap_password,
+          'admin_password': tms_keycloak_admin_password, 'lookup_password': tms_keycloak_lookup_password,
+          'operator_password': tms_keycloak_operator_password} | to_json }}
+  register: keycloak_identity
+  changed_when: keycloak_identity.rc == 0 and (keycloak_identity.stdout | from_json).changed
+  failed_when: false
+  no_log: true
+
+- name: Require successful identity reconciliation
+  ansible.builtin.assert:
+    that:
+      - keycloak_identity.rc == 0
+    fail_msg: "{{ keycloak_identity.stderr | default('Identity reconciliation failed; inspect the Keycloak service journal.') }}"
+
+- name: Remove the temporary bootstrap environment
+  ansible.builtin.file:
+    path: /etc/tms/keycloak-bootstrap.env
+    state: absent
+  notify: Restart Keycloak
+
+- name: Remove bootstrap credentials from the running service environment
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify the application realm after bootstrap cleanup
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/auth/realms/amprnet/.well-known/openid-configuration"
+    ca_path: /etc/tms/tls/ca.crt
+    validate_certs: true
+    use_proxy: false
+    return_content: true
+    timeout: 30
+  register: keycloak_discovery
+  until: keycloak_discovery.status == 200
+  retries: 120
+  delay: 10
+
+- name: Require the canonical HTTPS issuer and token endpoint
+  ansible.builtin.assert:
+    that:
+      - keycloak_discovery.json.issuer == tms_public_origin + '/auth/realms/amprnet'
+      - keycloak_discovery.json.token_endpoint == tms_public_origin + '/auth/realms/amprnet/protocol/openid-connect/token'
+
+- name: Mark successful identity provisioning
+  ansible.builtin.copy:
+    dest: /etc/tms/keycloak-ready
+    content: "{{ tms_database_deployment_id }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Write a credential-free identity report
+  ansible.builtin.copy:
+    dest: /etc/tms/keycloak-report.json
+    content: >-
+      {{ {'version': tms_keycloak_version, 'issuer': keycloak_discovery.json.issuer,
+          'checks': (keycloak_identity.stdout | from_json | dict2items | rejectattr('key', 'equalto', 'changed') | items2dict),
+          'backend': 'not installed; browser TMS acceptance pending'} | to_nice_json }}
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Fetch the identity report
+  ansible.builtin.fetch:
+    src: /etc/tms/keycloak-report.json
+    dest: "{{ playbook_dir }}/.local/reports/"
+
+- name: Report identity readiness
+  ansible.builtin.debug:
+    msg:
+      - "Keycloak {{ tms_keycloak_version }}: {{ tms_public_origin }}/auth/admin/master/console/"
+      - Permanent administrator tms-admin and TMS user appuser verified; bootstrap administrator removed.
+      - Backend lookup account verified; JavaScript and CSS requests with gzip passed.
+      - Backend readiness is verified by the backend playbook.

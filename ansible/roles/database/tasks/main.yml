@@ -1,0 +1,224 @@
+---
+- name: Inspect database ownership markers and existing data
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ tms_database_state_directory }}/database-owner.json"
+    - /var/lib/mysql
+    - "{{ tms_database_state_directory }}/database-ready"
+  register: database_existing
+
+- name: Read installed package names
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse to adopt an unmanaged database installation
+  ansible.builtin.assert:
+    that:
+      - >-
+        database_existing.results[0].stat.exists or
+        (not database_existing.results[1].stat.exists and
+         'mariadb-server' not in ansible_facts.packages and
+         'mysql-server' not in ansible_facts.packages)
+    fail_msg: A database installation already exists without a TMS ownership marker. Migration requires a separate procedure.
+
+- name: Read the existing deployment identity
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/database-owner.json"
+  register: database_owner
+  when: database_existing.results[0].stat.exists
+
+- name: Require the original vault for an existing deployment
+  ansible.builtin.assert:
+    that:
+      - (database_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+    fail_msg: This vault belongs to a different deployment. Restore the original vault and its key; credentials will not be reset.
+  when: database_existing.results[0].stat.exists
+
+- name: Create the root-owned deployment state directory
+  ansible.builtin.file:
+    path: "{{ tms_database_state_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Record ownership before installation so an interrupted run can resume
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/database-owner.json"
+    content: "{{ {'deployment_id': tms_database_deployment_id} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Install MariaDB and its Python driver without requesting upgrades
+  ansible.builtin.apt:
+    name:
+      - mariadb-server
+      - python3-pymysql
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Configure the database to listen only on IPv4 loopback
+  ansible.builtin.template:
+    src: native.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/99-tms-native.cnf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: /usr/sbin/mariadbd --defaults-file=%s --verbose --help
+  notify: Restart MariaDB
+
+- name: Enable MariaDB at boot and start it
+  ansible.builtin.systemd_service:
+    name: mariadb
+    enabled: true
+    state: started
+
+- name: Apply configuration before account and connection checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the administrative socket
+  ansible.builtin.wait_for:
+    path: "{{ tms_database_socket }}"
+    timeout: 180
+
+- name: Verify local root access and the effective server settings
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    query: >-
+      SELECT VERSION() AS version, CURRENT_USER() AS account,
+      @@bind_address AS bind_address, @@skip_name_resolve AS skip_name_resolve
+  register: database_server
+  changed_when: false
+  retries: 30
+  delay: 5
+  until: database_server is succeeded
+
+- name: Require MariaDB 11.8 and local administrative access
+  ansible.builtin.assert:
+    that:
+      - database_server.query_result[0][0].version is match('^11[.]8[.]')
+      - database_server.query_result[0][0].account == 'root@localhost'
+      - database_server.query_result[0][0].bind_address == '127.0.0.1'
+      - database_server.query_result[0][0].skip_name_resolve | int == 1
+
+- name: Remove anonymous database accounts
+  ansible.mariadb.mariadb_user:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    name: ''
+    host_all: true
+    state: absent
+  no_log: true
+  diff: false
+
+- name: Remove the default test database only during initial setup
+  ansible.mariadb.mariadb_db:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    name: test
+    state: absent
+  when: not database_existing.results[2].stat.exists
+
+- name: Find root accounts other than local socket administration
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    query: SELECT Host AS host FROM mysql.user WHERE User = 'root' AND Host <> 'localhost'
+  register: database_remote_root
+  changed_when: false
+
+- name: Remove nonlocal root accounts while retaining root at localhost
+  ansible.mariadb.mariadb_user:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    name: root
+    host: "{{ item.host }}"
+    state: absent
+  loop: "{{ database_remote_root.query_result[0] }}"
+  no_log: true
+  diff: false
+
+- name: Create separate UTF8 databases without replacing existing data
+  ansible.mariadb.mariadb_db:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    name: "{{ item }}"
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+    state: present
+  loop: [tms, keycloak]
+
+- name: Create TCP application accounts and preserve existing passwords
+  ansible.mariadb.mariadb_user:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    name: "{{ item.name }}"
+    host: 127.0.0.1
+    password: "{{ item.password }}"
+    priv: "{{ item.name }}.*:ALL"
+    append_privs: false
+    update_password: on_create
+    state: present
+  loop: "{{ tms_database_accounts }}"
+  no_log: true
+  diff: false
+
+- name: Verify each application account over TCP
+  ansible.builtin.include_tasks: verify-account.yml
+  loop: "{{ tms_database_accounts }}"
+  loop_control:
+    loop_var: database_account
+    label: "{{ database_account.name }}"
+  no_log: true
+
+- name: Mark initial database provisioning complete
+  ansible.builtin.copy:
+    content: "Database provisioning and both TCP account checks passed.\n"
+    dest: "{{ tms_database_state_directory }}/database-ready"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Write a database report without credentials
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/database-report.json"
+    content: "{{ database_report | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0640'
+  vars:
+    database_report:
+      version: "{{ database_server.query_result[0][0].version }}"
+      bind_address: "{{ database_server.query_result[0][0].bind_address }}"
+      administrative_account: "{{ database_server.query_result[0][0].account }}"
+      databases: [tms, keycloak]
+      application_accounts: ['tms@127.0.0.1', 'keycloak@127.0.0.1']
+      tcp_authentication: passed
+      cross_database_access: denied
+      password_policy: set on creation only; rotation is a separate operation
+
+- name: Fetch the database report
+  ansible.builtin.fetch:
+    src: "{{ tms_database_state_directory }}/database-report.json"
+    dest: "{{ playbook_dir }}/.local/reports/"
+    flat: false
+
+- name: Report the database result
+  ansible.builtin.debug:
+    msg:
+      - "MariaDB {{ database_server.query_result[0][0].version }} listens on 127.0.0.1."
+      - Both application accounts authenticated over TCP and were denied access to the other database.
+      - Local root administration still works; existing application passwords were not reset.
+      - Application services are not installed by this playbook.

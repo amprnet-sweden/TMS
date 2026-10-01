@@ -180,6 +180,12 @@ Keycloak is tricky because hostnames need to match the hostname in the TLS certi
 For the *Role Base Security* to work you must ensure that **Add to userinfo** is enabled in Keycloak
 `Client scopes "roles" -> Mappers "realm roles"`
 
+## Native installation with Ansible (preview)
+
+For a dedicated Debian 13 ARM64 host, see the [Ansible installer](ansible/README.md).
+It builds and installs the application, database, identity service and HTTPS proxy.
+The documentation lists tested behavior and remaining acceptance work.
+
 ## Build from source code  (the hard way)
 
 The instructions below are tested successfully on a Raspberry Pi 5 running Raspberry Pi OS.
@@ -225,8 +231,7 @@ VITE_APP_WS='wss://tms.mydomain.se/api/ws'
 Install frontend dependencies.
 
 ```
-npm update
-npm install
+npm ci --include=dev
 ```
 
 Build frontend.
@@ -245,6 +250,9 @@ If that is the case, install Node.js version 18 instead of 22 (`nvm install 18`)
 
 ### Install Java Development Kit (if not already installed)
 
+The current source build uses JDK 21 for both Gradle and compilation. Use Java 21
+for the native backend and Keycloak too; a separate JDK 17 installation is not needed.
+
 #### Option 1: Let SDKMAN handle your Java installation (recommended)
 
 ```
@@ -254,16 +262,16 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 sdk install java 21.0.9-tem
 ```
 
-**NOTE:** If you are using a very old Raspbian operating system on Raspberry Pi 3, you probably need to install an older Java version.
-Use `sdk list java` to see available options.
-For example run `sdk install java 17.0.17-librca` to install Java 17.
+**NOTE:** The current source build requires an OS that can run JDK 21. Older
+Raspbian releases that only support older JDKs need an OS upgrade or a separately
+validated older TMS release.
 
 SDKMAN home page: https://sdkman.io
 
 #### Option 2: Install Java manually
 
 ```
-sudo apt install openjdk-17-jdk
+sudo apt install openjdk-21-jdk-headless
 java -version
 ```
 

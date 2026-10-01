@@ -1,0 +1,41 @@
+---
+- name: Check the target
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Prepare the native toolchain and build TMS
+  hosts: tms
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/build.yml
+  pre_tasks:
+    - name: Require a prepared development source snapshot
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - tms_source_archive is defined
+          - tms_source_sha256 is defined
+          - tms_source_sha256 is match('^[a-f0-9]{64}$')
+          - tms_build_recipe_sha256 is defined
+          - tms_build_recipe_sha256 is match('^[a-f0-9]{64}$')
+          - tms_source_base_commit is defined
+          - tms_source_base_commit is match('^[a-f0-9]{40}$')
+          - tms_public_origin is match('^https://[a-zA-Z0-9.-]+(:[0-9]{1,5})?$')
+        fail_msg: Run install.sh; source builds require a real run, not check mode.
+
+    - name: Verify the controller source archive before provisioning
+      ansible.builtin.stat:
+        path: "{{ tms_source_archive }}"
+        checksum_algorithm: sha256
+      delegate_to: localhost
+      become: false
+      register: source_archive
+
+    - name: Require the expected archive checksum
+      ansible.builtin.assert:
+        that:
+          - source_archive.stat.exists
+          - source_archive.stat.checksum == tms_source_sha256
+  roles:
+    - build_tools
+    - build

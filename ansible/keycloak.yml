@@ -1,0 +1,28 @@
+---
+- name: Check the target
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Install and configure native Keycloak
+  hosts: tms
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/build.yml
+    - vars/keycloak.yml
+  pre_tasks:
+    - name: Require the HTTPS endpoint and protected credentials
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - tms_public_origin is match('^https://')
+          - tms_database_deployment_id is match('^[a-f0-9]{32}$')
+          - item is match('^[A-Za-z0-9_-]{32,}$')
+      loop:
+        - "{{ tms_keycloak_database_password }}"
+        - "{{ tms_keycloak_bootstrap_password }}"
+        - "{{ tms_keycloak_admin_password }}"
+        - "{{ tms_keycloak_lookup_password }}"
+        - "{{ tms_keycloak_operator_password }}"
+      no_log: true
+  roles:
+    - keycloak

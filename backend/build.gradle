@@ -9,8 +9,14 @@ version = System.getenv('RELEASE_VERSION') ?: '3.0.0-SNAPSHOT'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(21)
     }
+}
+
+// Compile with our single JDK 21 installation while retaining the existing
+// Java 17 bytecode/API baseline used by the separate ARM32 Docker image.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
 }
 
 repositories {

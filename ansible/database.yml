@@ -1,0 +1,26 @@
+---
+- name: Check the target
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Provision the native MariaDB databases
+  hosts: tms
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/database.yml
+  pre_tasks:
+    - name: Require protected credentials and a deployment identity
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - tms_database_deployment_id is defined
+          - tms_database_deployment_id is match('^[a-f0-9]{32}$')
+          - tms_database_password is defined
+          - tms_keycloak_database_password is defined
+          - tms_database_password | length >= 32
+          - tms_keycloak_database_password | length >= 32
+          - tms_database_password != tms_keycloak_database_password
+        fail_msg: Run install.sh to initialize or load encrypted credentials.
+      no_log: true
+  roles:
+    - database
