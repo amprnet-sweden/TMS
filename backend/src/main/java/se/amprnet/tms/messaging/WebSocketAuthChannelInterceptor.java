@@ -25,11 +25,9 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -54,26 +52,23 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             log.debug("preSend: No StompHeaderAccessor");
         }
         if (accessor != null && StompCommand.CONNECT == accessor.getCommand()) {
-            SecurityContext context = SecurityContextHolder.getContext();
-            Authentication authentication = context.getAuthentication();
-            log.debug("preSend security context: {}", authentication);
             String authHeader = accessor.getFirstNativeHeader("authorization");
 
             if (authHeader != null && authHeader.toLowerCase(Locale.ROOT).startsWith("bearer ")) {
                 String jwt = authHeader.substring(7);
                 try {
-                    UsernamePasswordAuthenticationToken user = authService.getAuthenticatedOrFail(jwt);
+                    Authentication user = authService.getAuthenticatedOrFail(jwt);
                     accessor.setUser(user);
                 } catch (AuthenticationException e) {
                     log.error("Authentication failed: {}", e.getMessage());
-                    return null; // Reject connection
+                    throw e; // Let the STOMP handler report the rejected connection.
                 }
             } else {
                 log.debug("preSend: No authorization header");
-                return null; // No auth header
+                throw new AuthenticationCredentialsNotFoundException("Missing WebSocket authorization");
             }
         }
-        log.debug("preSend returning: {}", message);
+        // CONNECT headers contain a bearer token; never log the complete message.
         return message;
     }
 }

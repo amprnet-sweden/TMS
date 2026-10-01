@@ -17,35 +17,36 @@
 
 package se.amprnet.tms.messaging;
 
-import com.nimbusds.jwt.JWT;
-import com.nimbusds.jwt.JWTParser;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import se.amprnet.tms.auth.AmprnetClaimsConverter;
 
 @Service
 public class WebSocketAuthenticatorService {
 
-    private final UserDetailsService userDetailsService;
+    private final JwtDecoder jwtDecoder;
+    private final AmprnetClaimsConverter claimsConverter;
 
-    public WebSocketAuthenticatorService(UserDetailsService userDetailsService) {
-        this.userDetailsService = userDetailsService;
+    public WebSocketAuthenticatorService(JwtDecoder jwtDecoder, AmprnetClaimsConverter claimsConverter) {
+        this.jwtDecoder = jwtDecoder;
+        this.claimsConverter = claimsConverter;
     }
 
-    public UsernamePasswordAuthenticationToken getAuthenticatedOrFail(String token) {
+    public AbstractAuthenticationToken getAuthenticatedOrFail(String token) {
         try {
-            JWT jwt = JWTParser.parse(token);
-            String email = (String) jwt.getJWTClaimsSet().getClaim("preferred_username");
-            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-
-            return new UsernamePasswordAuthenticationToken(
-                    userDetails, null,
-                    userDetails.getAuthorities()
-            );
-        } catch (Exception e) {
-            throw new AuthenticationCredentialsNotFoundException(e.getMessage());
+            // Use the same signature, issuer and expiry validation as HTTP requests.
+            Jwt jwt = jwtDecoder.decode(token);
+            if (!StringUtils.hasText(jwt.getClaimAsString("preferred_username"))) {
+                throw new AuthenticationCredentialsNotFoundException("Missing WebSocket user identity");
+            }
+            return claimsConverter.convert(jwt);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new AuthenticationCredentialsNotFoundException("Invalid WebSocket access token");
         }
     }
 }
