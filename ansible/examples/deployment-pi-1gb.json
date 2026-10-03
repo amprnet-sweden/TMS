@@ -1,0 +1,5 @@
+{
+  "tms_public_origin": "https://tms.example.test",
+  "tms_tenant": "default",
+  "tms_resource_profile": "pi_1gb_experimental"
+}

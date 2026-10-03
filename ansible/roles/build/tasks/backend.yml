@@ -6,7 +6,7 @@
       - ./gradlew
       - --no-daemon
       - --console=plain
-      - --max-workers=2
+      - "--max-workers={{ tms_resources.gradle_workers }}"
       - "-Porg.gradle.java.installations.paths={{ tms_java_home }}"
       - -Porg.gradle.java.installations.auto-detect=false
       - -Porg.gradle.java.installations.auto-download=false
@@ -14,6 +14,7 @@
       - -x
       - test
     chdir: "{{ component_directory }}/backend"
+  environment: "{{ {'JAVA_HOME': tms_java_home} | combine(tms_resources.gradle_environment) }}"
   async: 3600
   poll: 15
   changed_when: true

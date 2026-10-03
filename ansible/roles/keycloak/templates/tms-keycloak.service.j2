@@ -9,7 +9,7 @@ User=keycloak
 Group=keycloak
 WorkingDirectory={{ tms_keycloak_home }}
 Environment=JAVA_HOME={{ tms_java_home }}
-Environment="JAVA_OPTS_APPEND=-Xms256m -Xmx768m"
+Environment="JAVA_OPTS_APPEND=-Xms{{ tms_resources.keycloak_heap_initial_mb }}m -Xmx{{ tms_resources.keycloak_heap_max_mb }}m"
 EnvironmentFile=/etc/tms/keycloak.env
 EnvironmentFile=-/etc/tms/keycloak-bootstrap.env
 ExecStart={{ tms_keycloak_home }}/bin/kc.sh start --optimized

@@ -2,7 +2,19 @@
 - name: Check the native installation target
   hosts: tms
   gather_facts: true
+  vars_files:
+    - vars/resources.yml
   tasks:
+    - name: Validate the selected resource profile
+      ansible.builtin.assert:
+        that:
+          - tms_resource_profile | default('standard') in tms_resource_profiles
+        fail_msg: Select standard or pi_1gb_experimental.
+
+    - name: Resolve resource budgets for all installation stages
+      ansible.builtin.set_fact:
+        tms_resources: "{{ tms_resource_profiles[tms_resource_profile | default('standard')] }}"
+
     - name: Require the selected operating system and architecture
       ansible.builtin.assert:
         that:
@@ -10,15 +22,17 @@
           - ansible_facts['distribution'] == 'Debian'
           - ansible_facts['distribution_major_version'] == '13'
           - ansible_facts['architecture'] == 'aarch64'
-          - ansible_facts['memtotal_mb'] >= 3500
-        fail_msg: This installer requires Debian 13 ARM64 with approximately 4 GiB RAM.
+          - ansible_facts['memtotal_mb'] >= tms_resources.minimum_memory_mb
+        fail_msg: "Debian 13 ARM64 and at least {{ tms_resources.minimum_memory_mb }} MiB RAM are required for this profile."
 
     - name: Verify privilege escalation without changing the guest
       ansible.builtin.command: /usr/bin/id -u
       become: true
       register: privileged_identity
       changed_when: false
-      failed_when: privileged_identity.stdout != '0'
+      failed_when: >-
+        privileged_identity.rc | default(1) != 0 or
+        privileged_identity.stdout | default('') != '0'
       check_mode: false
 
     - name: Report the verified target

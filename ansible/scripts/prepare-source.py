@@ -72,7 +72,7 @@ def main():
     temporary.replace(destination)
 
     recipe = hashlib.sha256()
-    recipe_files = [ansible / "build.yml", Path(__file__).resolve()]
+    recipe_files = [ansible / "build.yml", ansible / "vars/resources.yml", Path(__file__).resolve()]
     recipe_files += [path for role in ("build", "build_tools")
                      for path in (ansible / "roles" / role).rglob("*")
                      if path.is_file() and path.suffix in (".yml", ".j2", ".py")]

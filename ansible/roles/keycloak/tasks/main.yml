@@ -124,7 +124,7 @@
   ansible.builtin.set_fact:
     keycloak_build_marker: >-
       {{ tms_keycloak_home }}/.tms-build-{{
-      ([tms_keycloak_sha256, tms_java_home] + tms_keycloak_build_arguments) | to_json | hash('sha256') }}
+      ([tms_keycloak_sha256, tms_java_home, tms_resources.keycloak_build_environment] + tms_keycloak_build_arguments) | to_json | hash('sha256') }}
 
 - name: Inspect completion of the required runtime build
   ansible.builtin.stat:
@@ -143,8 +143,7 @@
   ansible.builtin.command:
     argv: "{{ [tms_keycloak_home + '/bin/kc.sh'] + tms_keycloak_build_arguments }}"
     creates: "{{ keycloak_build_marker }}"
-  environment:
-    JAVA_HOME: "{{ tms_java_home }}"
+  environment: "{{ {'JAVA_HOME': tms_java_home} | combine(tms_resources.keycloak_build_environment) }}"
   async: 1800
   poll: 15
   register: keycloak_build

@@ -11,7 +11,7 @@ Group=tms-backend
 WorkingDirectory=/var/lib/tms-backend
 EnvironmentFile=/etc/tms/backend.env
 Environment=SPRING_PROFILES_ACTIVE=native
-ExecStart={{ tms_java_home }}/bin/java -Xms128m -Xmx768m -Djavax.net.ssl.trustStore=/etc/ssl/certs/tms-backend-cacerts -Djavax.net.ssl.trustStorePassword=changeit -jar /opt/tms-backend/current/app.jar --spring.config.location=file:/etc/tms-backend/application.yaml
+ExecStart={{ tms_java_home }}/bin/java -Xms{{ tms_resources.backend_heap_initial_mb }}m -Xmx{{ tms_resources.backend_heap_max_mb }}m -Djavax.net.ssl.trustStore=/etc/ssl/certs/tms-backend-cacerts -Djavax.net.ssl.trustStorePassword=changeit -jar /opt/tms-backend/current/app.jar --spring.config.location=file:/etc/tms-backend/application.yaml
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=90

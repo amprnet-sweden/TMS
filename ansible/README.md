@@ -1,16 +1,22 @@
 # Native installation (preview)
 
-Installs TMS on a dedicated **Debian 13 ARM64** host with at least 4 GiB RAM:
+Installs TMS on a dedicated **Debian 13 ARM64** host:
 Java 21, Node 22, MariaDB 11.8, Keycloak 26.4.7, NGINX, frontend and backend.
 Application builds run under an unprivileged account; services use separate
 accounts. Databases and application listeners bind to loopback. NGINX provides
 HTTPS, including WebSocket forwarding.
+The standard profile requires 4 GiB RAM; an experimental 1 GB profile is
+described below.
 
 This is an initial-installation contribution for review. Component playbooks
 passed repeated zero-change runs on an emulated ARM64 VM. Browser login,
 incident persistence, live updates between windows and recovery after reboot
-were verified. Physical Raspberry Pi testing, backup restoration and a clean
-installation using this consolidated entry point remain pending.
+were verified on that VM. A clean installation using this consolidated entry
+point passed on a physical 1 GB Raspberry Pi 3 using the experimental profile:
+on-target builds, API/STOMP checks, a zero-change rerun and automatic recovery
+after reboot. Browser login/logout, saves and live updates passed, including
+saves and live updates after reboot. Capacity testing and backup restoration
+are outside this contribution's validation scope.
 
 ## Install
 
@@ -56,6 +62,30 @@ Open `<public-origin>/tms/`. Retrieve the generated application login locally:
 Use `tms-admin` instead for `<public-origin>/auth/admin/master/console/`.
 These are application accounts, separate from the SSH account. The temporary
 bootstrap administrator is removed after permanent administrator verification.
+
+## Experimental 1 GB ARM64 profile
+
+For hardware validation on a 1 GB Debian 13 ARM64 host, explicitly add
+`"tms_resource_profile": "pi_1gb_experimental"` to deployment.json.
+Omitting this setting selects `standard` and retains the 4 GB requirement.
+The experimental profile requires at least 850 MiB usable RAM and uses trial
+256 MiB heaps for each Java service, one Gradle worker, bounded build heaps,
+and a smaller MariaDB buffer pool. JVM native memory is additional to heap.
+Installation and functional checks passed on a physical 1 GB Pi 3 with
+approximately 904 MiB of existing zram swap. This is an experimental profile;
+the result does not establish sustained workload capacity.
+
+The installer does not add or resize swap. On-target builds may be slow or
+fail on this hardware. Measure memory pressure, service restarts and latency
+during installation, concurrent browser use and reboot recovery before
+relying on the profile. A separate build-host workflow is not implemented yet.
+
+Read-only eligibility and sudo verification can be run before installation:
+
+```bash
+"$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i inventory.yml preflight.yml \
+  -e tms_resource_profile=pi_1gb_experimental --ask-become-pass
+```
 
 ## Repeat and preserve
 

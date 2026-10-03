@@ -12,13 +12,14 @@
 - name: "Build when the fingerprint or artifact changes for {{ component.name }}"
   become: true
   become_user: "{{ tms_build_user }}"
-  environment:
-    HOME: "{{ tms_build_home }}"
-    JAVA_HOME: "{{ tms_java_home }}"
-    GRADLE_USER_HOME: "{{ tms_build_home }}/.gradle"
-    PATH: "{{ tms_java_home }}/bin:{{ tms_node_home }}/bin:/usr/bin:/bin"
-    npm_config_cache: "{{ tms_build_home }}/.npm"
+  environment: "{{ build_environment | combine(tms_resources.build_environment) }}"
   vars:
+    build_environment:
+      HOME: "{{ tms_build_home }}"
+      JAVA_HOME: "{{ tms_java_home }}"
+      GRADLE_USER_HOME: "{{ tms_build_home }}/.gradle"
+      PATH: "{{ tms_java_home }}/bin:{{ tms_node_home }}/bin:/usr/bin:/bin"
+      npm_config_cache: "{{ tms_build_home }}/.npm"
     component_directory: "{{ tms_build_root }}/{{ component.name }}/{{ component.fingerprint }}"
   when: not build_complete.stat.exists or not build_artifact.stat.exists
   block:
