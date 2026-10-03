@@ -1,0 +1,291 @@
+---
+- name: Read the existing build and database ownership reports
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - /var/lib/tms-build/build-report.json
+    - /etc/tms/database-owner.json
+    - /etc/tms/keycloak-ready
+  register: backend_inputs
+
+- name: Decode the successful build report
+  ansible.builtin.set_fact:
+    backend_build: "{{ backend_inputs.results[0].content | b64decode | from_json }}"
+
+- name: Require the original deployment and a managed source artifact
+  ansible.builtin.assert:
+    that:
+      - (backend_inputs.results[1].content | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - backend_inputs.results[2].content | b64decode | trim == tms_database_deployment_id
+      - backend_build.public_origin == tms_public_origin
+      - backend_build.backend_jar is match('^/var/lib/tms-build/backend/[a-f0-9]{64}/backend/app.jar$')
+      - backend_build.backend_sha256 is match('^[a-f0-9]{64}$')
+
+- name: Verify the built JAR checksum before deployment
+  ansible.builtin.stat:
+    path: "{{ backend_build.backend_jar }}"
+    checksum_algorithm: sha256
+  register: backend_source
+
+- name: Require an intact regular JAR file
+  ansible.builtin.assert:
+    that:
+      - backend_source.stat.isreg | default(false)
+      - not backend_source.stat.islnk | default(true)
+      - backend_source.stat.checksum | default('') == backend_build.backend_sha256
+
+- name: Inspect backend ownership and prerequisite paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/tms/backend-owner.json
+    - /opt/tms-backend
+    - /etc/tms-backend
+    - /var/lib/tms-backend
+    - /etc/systemd/system/tms-backend.service
+    - /etc/ssl/certs/tms-backend-cacerts
+  register: backend_paths
+
+- name: Inspect the existing backend service account
+  ansible.builtin.getent:
+    database: passwd
+    key: tms-backend
+    fail_key: false
+
+- name: Require Java trust and refuse an unmanaged backend installation
+  ansible.builtin.assert:
+    that:
+      - backend_paths.results[5].stat.isreg | default(false)
+      - >-
+        backend_paths.results[0].stat.exists or
+        (not backend_paths.results[1].stat.exists and not backend_paths.results[2].stat.exists
+         and not backend_paths.results[3].stat.exists and not backend_paths.results[4].stat.exists
+         and not ansible_facts.getent_passwd['tms-backend'])
+    fail_msg: Complete HTTPS setup first. Existing unmanaged backend files or accounts require explicit migration.
+
+- name: Read the existing backend ownership record
+  ansible.builtin.slurp:
+    src: /etc/tms/backend-owner.json
+  register: backend_owner
+  when: backend_paths.results[0].stat.exists
+
+- name: Reject a different vault or implicit application upgrade
+  ansible.builtin.assert:
+    that:
+      - (backend_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - (backend_owner.content | b64decode | from_json).backend_sha256 == backend_build.backend_sha256
+    fail_msg: This installation stage preserves its original release. Application upgrades require a backup and migration procedure.
+  when: backend_paths.results[0].stat.exists
+
+- name: Inspect the application database before the first installation
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: ''
+    query: SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = 'tms'
+  register: backend_tables
+  when: not backend_paths.results[0].stat.exists
+
+- name: Refuse to adopt an existing application database
+  ansible.builtin.assert:
+    that:
+      - backend_tables.query_result[0][0].table_count | int == 0
+  when: not backend_paths.results[0].stat.exists
+
+- name: Record ownership before provisioning so interrupted runs can resume
+  ansible.builtin.copy:
+    dest: /etc/tms/backend-owner.json
+    content: "{{ {'deployment_id': tms_database_deployment_id, 'backend_sha256': backend_build.backend_sha256} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Create the backend service group
+  ansible.builtin.group:
+    name: tms-backend
+    system: true
+
+- name: Create the unprivileged backend service account
+  ansible.builtin.user:
+    name: tms-backend
+    group: tms-backend
+    system: true
+    home: /var/lib/tms-backend
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create root-owned release directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/tms-backend
+    - /opt/tms-backend/releases
+    - "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}"
+
+- name: Create the private service configuration directory
+  ansible.builtin.file:
+    path: /etc/tms-backend
+    state: directory
+    owner: root
+    group: tms-backend
+    mode: '0750'
+
+- name: Create the writable service working directory
+  ansible.builtin.file:
+    path: /var/lib/tms-backend
+    state: directory
+    owner: tms-backend
+    group: tms-backend
+    mode: '0750'
+
+- name: Install the verified JAR as a root-owned release
+  ansible.builtin.copy:
+    src: "{{ backend_build.backend_jar }}"
+    dest: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}/app.jar"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart TMS backend
+
+- name: Verify the deployed JAR checksum
+  ansible.builtin.stat:
+    path: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}/app.jar"
+    checksum_algorithm: sha256
+  register: backend_installed
+
+- name: Require the installed release to match the build report
+  ansible.builtin.assert:
+    that:
+      - backend_installed.stat.checksum == backend_build.backend_sha256
+
+- name: Install the explicit native application configuration
+  ansible.builtin.template:
+    src: application.yaml.j2
+    dest: /etc/tms-backend/application.yaml
+    owner: root
+    group: tms-backend
+    mode: '0640'
+  notify: Restart TMS backend
+
+- name: Install the root-readable service credentials
+  ansible.builtin.template:
+    src: backend.env.j2
+    dest: /etc/tms/backend.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Restart TMS backend
+
+- name: Activate the verified release
+  ansible.builtin.file:
+    src: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}"
+    dest: /opt/tms-backend/current
+    state: link
+    owner: root
+    group: root
+  notify: Restart TMS backend
+
+- name: Install the native backend service
+  ansible.builtin.template:
+    src: tms-backend.service.j2
+    dest: /etc/systemd/system/tms-backend.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart TMS backend
+
+- name: Apply backend changes before verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the backend at boot and ensure it is running
+  ansible.builtin.systemd_service:
+    name: tms-backend
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for backend health through verified HTTPS
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/api/actuator/health"
+    ca_path: /etc/tms/tls/ca.crt
+    validate_certs: true
+    use_proxy: false
+    timeout: 30
+  register: backend_health
+  until: backend_health.status == 200 and (backend_health.json.status | default('')) == 'UP'
+  retries: 120
+  delay: 10
+
+- name: Verify that Liquibase applied application migrations
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: /run/mysqld/mysqld.sock
+    config_file: ''
+    query: SELECT COUNT(*) AS applied_changes FROM tms.DATABASECHANGELOG
+  register: backend_migrations
+
+- name: Require applied migrations
+  ansible.builtin.assert:
+    that:
+      - backend_migrations.query_result[0][0].applied_changes | int > 0
+
+- name: Install the read-only API verification helper
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/lib/tms-ansible/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - verify-backend.py
+    - WebSocketProbe.java
+
+- name: Verify JWT authentication database reads and backend HTTPS identity lookups
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/lib/tms-ansible/verify-backend.py
+    stdin: "{{ {'origin': tms_public_origin, 'password': tms_keycloak_operator_password} | to_json }}"
+  register: backend_verification
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Require successful authenticated application checks
+  ansible.builtin.assert:
+    that:
+      - backend_verification.rc == 0
+    fail_msg: "{{ backend_verification.stderr | default('Backend API verification failed.') }}"
+
+- name: Write the backend report without credentials or application records
+  ansible.builtin.copy:
+    dest: /etc/tms/backend-report.json
+    content: >-
+      {{ {'backend_sha256': backend_build.backend_sha256, 'public_origin': tms_public_origin,
+          'source_sha256': backend_build.source_sha256, 'java_home': tms_java_home,
+          'applied_changes': backend_migrations.query_result[0][0].applied_changes,
+          'checks': backend_verification.stdout | from_json,
+          'packaging_tests': backend_build.backend_tests} | to_nice_json }}
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Fetch the backend verification report
+  ansible.builtin.fetch:
+    src: /etc/tms/backend-report.json
+    dest: "{{ playbook_dir }}/.local/reports/"
+
+- name: Report backend readiness
+  ansible.builtin.debug:
+    msg:
+      - "TMS is ready for browser testing at {{ tms_public_origin }}/tms/ as appuser."
+      - JWT and cookie authentication, database reads, and Java HTTPS Keycloak lookups passed.
+      - Run this stage again to verify zero changes before browser acceptance testing.
+      - Verify browser writes, live updates, reboot and recovery for this deployment.

@@ -1,0 +1,45 @@
+---
+- name: "Inspect completion marker for {{ component.name }}"
+  ansible.builtin.stat:
+    path: "{{ tms_build_root }}/{{ component.name }}/{{ component.fingerprint }}/.build-complete"
+  register: build_complete
+
+- name: "Inspect artifact for {{ component.name }}"
+  ansible.builtin.stat:
+    path: "{{ tms_build_root }}/{{ component.name }}/{{ component.fingerprint }}/{{ component.artifact }}"
+  register: build_artifact
+
+- name: "Build when the fingerprint or artifact changes for {{ component.name }}"
+  become: true
+  become_user: "{{ tms_build_user }}"
+  environment: "{{ build_environment | combine(tms_resources.build_environment) }}"
+  vars:
+    build_environment:
+      HOME: "{{ tms_build_home }}"
+      JAVA_HOME: "{{ tms_java_home }}"
+      GRADLE_USER_HOME: "{{ tms_build_home }}/.gradle"
+      PATH: "{{ tms_java_home }}/bin:{{ tms_node_home }}/bin:/usr/bin:/bin"
+      npm_config_cache: "{{ tms_build_home }}/.npm"
+    component_directory: "{{ tms_build_root }}/{{ component.name }}/{{ component.fingerprint }}"
+  when: not build_complete.stat.exists or not build_artifact.stat.exists
+  block:
+    - name: Create the fingerprinted build directory
+      ansible.builtin.file:
+        path: "{{ component_directory }}"
+        state: directory
+        mode: '0755'
+
+    - name: Extract the source snapshot
+      ansible.builtin.unarchive:
+        src: "/var/cache/tms-build/{{ tms_source_sha256 }}.tar"
+        dest: "{{ component_directory }}"
+        remote_src: true
+
+    - name: Run the component build
+      ansible.builtin.include_tasks: "{{ component.name }}.yml"
+
+    - name: Mark the build complete only after successful packaging
+      ansible.builtin.copy:
+        content: "{{ component.fingerprint }}\n"
+        dest: "{{ component_directory }}/.build-complete"
+        mode: '0644'

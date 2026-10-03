@@ -1,0 +1,31 @@
+---
+# Experimental budgets require hardware acceptance; heaps exclude native memory.
+tms_resource_profiles:
+  standard:
+    minimum_memory_mb: 3500
+    backend_heap_initial_mb: 128
+    backend_heap_max_mb: 768
+    keycloak_heap_initial_mb: 256
+    keycloak_heap_max_mb: 768
+    gradle_workers: 2
+    build_environment: {}
+    gradle_environment: {}
+    keycloak_build_environment: {}
+    mariadb_settings: {}
+  pi_1gb_experimental:
+    minimum_memory_mb: 850
+    backend_heap_initial_mb: 64
+    backend_heap_max_mb: 256
+    keycloak_heap_initial_mb: 64
+    keycloak_heap_max_mb: 256
+    gradle_workers: 1
+    build_environment:
+      NODE_OPTIONS: --max-old-space-size=384
+    gradle_environment:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx256m -Dorg.gradle.parallel=false
+    keycloak_build_environment:
+      JAVA_OPTS_APPEND: -Xms64m -Xmx256m
+    mariadb_settings:
+      innodb-buffer-pool-size: 64M
+      max-connections: 30
+      table-open-cache: 200

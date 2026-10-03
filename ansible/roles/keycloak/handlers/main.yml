@@ -1,0 +1,6 @@
+---
+- name: Restart Keycloak
+  ansible.builtin.systemd_service:
+    name: tms-keycloak
+    state: restarted
+    daemon_reload: true

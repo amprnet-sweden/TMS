@@ -1,0 +1,7 @@
+# Managed by the TMS native installation playbook.
+[mariadb]
+bind-address = 127.0.0.1
+skip-name-resolve
+{% for setting, value in tms_resources.mariadb_settings.items() %}
+{{ setting }} = {{ value }}
+{% endfor %}

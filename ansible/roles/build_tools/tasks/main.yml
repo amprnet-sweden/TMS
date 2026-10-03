@@ -1,0 +1,137 @@
+---
+- name: Inspect the proposed managed build directory
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ tms_build_root }}"
+    - "{{ tms_build_root }}/.ansible-managed"
+  register: build_tools_directory_state
+
+- name: Refuse to adopt an unmanaged build directory
+  ansible.builtin.assert:
+    that:
+      - not build_tools_directory_state.results[0].stat.exists or build_tools_directory_state.results[1].stat.exists
+    fail_msg: The build directory already exists without our management marker; inspect it before proceeding.
+
+- name: Check for an existing build account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ tms_build_user }}"
+    fail_key: false
+
+- name: Refuse to reuse an unrelated account
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.getent_passwd[tms_build_user] is none or build_tools_directory_state.results[1].stat.exists
+    fail_msg: The proposed build account already exists outside this playbook's managed directory.
+
+- name: Install the single JDK and native build prerequisites
+  ansible.builtin.apt:
+    name:
+      - openjdk-21-jdk-headless
+      - ca-certificates
+      - acl
+      - xz-utils
+      - tar
+      - unzip
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Create the root-owned build directory
+  ansible.builtin.file:
+    path: "{{ tms_build_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Mark this build directory as managed
+  ansible.builtin.copy:
+    content: "Managed by the TMS Ansible build playbook.\n"
+    dest: "{{ tms_build_root }}/.ansible-managed"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create the build account group
+  ansible.builtin.group:
+    name: "{{ tms_build_user }}"
+    system: true
+
+- name: Create the unprivileged build account
+  ansible.builtin.user:
+    name: "{{ tms_build_user }}"
+    system: true
+    group: "{{ tms_build_user }}"
+    home: "{{ tms_build_home }}"
+    create_home: true
+    shell: /usr/sbin/nologin
+
+- name: Create writable build and cache directories
+  ansible.builtin.file:
+    path: "{{ tms_build_root }}/{{ item }}"
+    state: directory
+    owner: "{{ tms_build_user }}"
+    group: "{{ tms_build_user }}"
+    mode: '0755'
+  loop:
+    - home
+    - backend
+    - frontend
+
+- name: Create root-owned toolchain and download directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/tms-toolchains
+    - /var/cache/tms-build
+
+- name: Download the pinned Node ARM64 distribution and verify its checksum
+  ansible.builtin.get_url:
+    url: "https://nodejs.org/dist/v{{ tms_node_version }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    dest: "/var/cache/tms-build/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    checksum: "sha256:{{ tms_node_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+    timeout: 120
+
+- name: Extract the pinned Node distribution
+  ansible.builtin.unarchive:
+    src: "/var/cache/tms-build/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    dest: /opt/tms-toolchains
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ tms_node_home }}/bin/node"
+
+- name: Read the compiler version from the explicit Java home
+  ansible.builtin.command:
+    argv: ["{{ tms_java_home }}/bin/javac", '-version']
+  register: build_tools_compiler_version
+  changed_when: false
+
+- name: Read the runtime version from the same Java home
+  ansible.builtin.command:
+    argv: ["{{ tms_java_home }}/bin/java", '-version']
+  register: build_tools_java_version
+  changed_when: false
+
+- name: Read the Node version
+  ansible.builtin.command:
+    argv: ["{{ tms_node_home }}/bin/node", '--version']
+  register: build_tools_node_version
+  changed_when: false
+
+- name: Require the selected Java and Node versions
+  ansible.builtin.assert:
+    that:
+      - build_tools_compiler_version.stdout is match('^javac 21[.]')
+      - build_tools_java_version.stderr is search('version "21[.]')
+      - build_tools_node_version.stdout == 'v' ~ tms_node_version

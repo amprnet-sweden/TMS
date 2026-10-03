@@ -1,0 +1,11 @@
+---
+- name: Build application artifacts
+  ansible.builtin.import_playbook: build.yml
+- name: Prepare databases
+  ansible.builtin.import_playbook: database.yml
+- name: Serve frontend and HTTPS proxy
+  ansible.builtin.import_playbook: https.yml
+- name: Configure identity service
+  ansible.builtin.import_playbook: keycloak.yml
+- name: Start and verify application
+  ansible.builtin.import_playbook: backend.yml

@@ -1,0 +1,40 @@
+---
+- name: Verify the account identity and its own database
+  ansible.mariadb.mariadb_query:
+    login_host: 127.0.0.1
+    login_user: "{{ database_account.name }}"
+    login_password: "{{ database_account.password }}"
+    login_db: "{{ database_account.name }}"
+    config_file: ''
+    query: SELECT CURRENT_USER() AS account, DATABASE() AS db
+  register: database_login
+  changed_when: false
+  no_log: true
+
+- name: Require the exact TCP grant and selected database
+  ansible.builtin.assert:
+    that:
+      - database_login.query_result[0][0].account == database_account.name ~ '@127.0.0.1'
+      - database_login.query_result[0][0].db == database_account.name
+  no_log: true
+
+- name: Attempt to select the other application database
+  ansible.mariadb.mariadb_query:
+    login_host: 127.0.0.1
+    login_user: "{{ database_account.name }}"
+    login_password: "{{ database_account.password }}"
+    login_db: "{{ 'keycloak' if database_account.name == 'tms' else 'tms' }}"
+    config_file: ''
+    query: SELECT 1
+  register: database_cross_access
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Require an access-denied response for the other database
+  ansible.builtin.assert:
+    that:
+      - database_cross_access.msg is defined
+      - "'1044' in database_cross_access.msg"
+    fail_msg: The application account must not have access to the other database.
+  no_log: true

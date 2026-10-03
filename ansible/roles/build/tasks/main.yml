@@ -1,0 +1,85 @@
+---
+- name: Derive build fingerprints from source, tools and build instructions
+  ansible.builtin.set_fact:
+    build_backend_fingerprint: >-
+      {{ ([tms_source_sha256, tms_build_recipe_sha256, build_tools_java_version.stderr,
+           build_tools_compiler_version.stdout, tms_backend_tests, tms_resources.gradle_workers, tms_resources.gradle_environment] | to_json) | hash('sha256') }}
+    build_frontend_fingerprint: >-
+      {{ ([tms_source_sha256, tms_build_recipe_sha256, tms_node_sha256, tms_public_origin, tms_resources.build_environment] | to_json) | hash('sha256') }}
+
+- name: Copy the immutable development snapshot to the guest
+  ansible.builtin.copy:
+    src: "{{ tms_source_archive }}"
+    dest: "/var/cache/tms-build/{{ tms_source_sha256 }}.tar"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Build each component as the unprivileged account
+  ansible.builtin.include_tasks: component.yml
+  loop:
+    - name: backend
+      fingerprint: "{{ build_backend_fingerprint }}"
+      artifact: backend/app.jar
+    - name: frontend
+      fingerprint: "{{ build_frontend_fingerprint }}"
+      artifact: frontend/dist/index.html
+  loop_control:
+    loop_var: component
+    label: "{{ component.name }}"
+
+- name: Read the built backend checksum
+  ansible.builtin.stat:
+    path: "{{ tms_build_root }}/backend/{{ build_backend_fingerprint }}/backend/app.jar"
+    checksum_algorithm: sha256
+  register: build_backend_artifact
+
+- name: Record the frontend output checksums
+  ansible.builtin.find:
+    paths: "{{ tms_build_root }}/frontend/{{ build_frontend_fingerprint }}/frontend/dist"
+    recurse: true
+    file_type: file
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: build_frontend_artifacts
+
+- name: Write the build report without secrets
+  ansible.builtin.copy:
+    dest: "{{ tms_build_root }}/build-report.json"
+    owner: root
+    group: root
+    mode: '0644'
+    content: "{{ build_report | to_nice_json }}\n"
+  vars:
+    build_report:
+      resource_profile: "{{ tms_resource_profile | default('standard') }}"
+      resources: "{{ tms_resources }}"
+      source_kind: development snapshot (not a committed release)
+      source_base_commit: "{{ tms_source_base_commit }}"
+      source_sha256: "{{ tms_source_sha256 }}"
+      recipe_sha256: "{{ tms_build_recipe_sha256 }}"
+      java: "{{ build_tools_java_version.stderr }}"
+      compiler: "{{ build_tools_compiler_version.stdout }}"
+      node: "{{ build_tools_node_version.stdout }}"
+      public_origin: "{{ tms_public_origin }}"
+      backend_tests: "{{ tms_backend_tests }}"
+      backend_jar: "{{ build_backend_artifact.stat.path }}"
+      backend_sha256: "{{ build_backend_artifact.stat.checksum }}"
+      frontend_directory: "{{ tms_build_root }}/frontend/{{ build_frontend_fingerprint }}/frontend/dist"
+      frontend_files: >-
+        {{ build_frontend_artifacts.files | sort(attribute='path') | items2dict(key_name='path', value_name='checksum') }}
+
+- name: Fetch the report to the controller
+  ansible.builtin.fetch:
+    src: "{{ tms_build_root }}/build-report.json"
+    dest: "{{ playbook_dir }}/.local/reports/"
+    flat: false
+
+- name: Report build results
+  ansible.builtin.debug:
+    msg:
+      - "Backend JAR: {{ build_backend_artifact.stat.path }}"
+      - "Frontend: {{ tms_build_root }}/frontend/{{ build_frontend_fingerprint }}/frontend/dist"
+      - "Report: {{ tms_build_root }}/build-report.json (also fetched to .local/reports)"
+      - "Backend tests: {{ tms_backend_tests }}"
+      - Builds completed; application services are not installed by this playbook.

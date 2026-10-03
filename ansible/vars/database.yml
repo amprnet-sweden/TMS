@@ -1,0 +1,8 @@
+---
+tms_database_socket: /run/mysqld/mysqld.sock
+tms_database_state_directory: /etc/tms
+tms_database_accounts:
+  - name: tms
+    password: "{{ tms_database_password }}"
+  - name: keycloak
+    password: "{{ tms_keycloak_database_password }}"

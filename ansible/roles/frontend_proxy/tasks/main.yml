@@ -1,0 +1,321 @@
+---
+- name: Read the successful build report
+  ansible.builtin.slurp:
+    src: /var/lib/tms-build/build-report.json
+  register: frontend_proxy_report_file
+
+- name: Decode the build report
+  ansible.builtin.set_fact:
+    frontend_proxy_build: "{{ frontend_proxy_report_file.content | b64decode | from_json }}"
+
+- name: Require matching build URLs and a managed artifact path
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_build.public_origin == tms_public_origin
+      - frontend_proxy_build.frontend_directory is match('^/var/lib/tms-build/frontend/[a-f0-9]{64}/frontend/dist$')
+      - frontend_proxy_build.frontend_files | length > 0
+
+- name: Verify all source frontend checksums
+  ansible.builtin.find:
+    paths: "{{ frontend_proxy_build.frontend_directory }}"
+    recurse: true
+    hidden: true
+    file_type: file
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: frontend_proxy_files
+
+- name: Check for symlinks in the source frontend
+  ansible.builtin.find:
+    paths: "{{ frontend_proxy_build.frontend_directory }}"
+    recurse: true
+    hidden: true
+    file_type: link
+  register: frontend_proxy_links
+
+- name: Require an intact frontend artifact before deployment
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_links.matched == 0
+      - >-
+        (frontend_proxy_files.files | items2dict(key_name='path', value_name='checksum'))
+        == frontend_proxy_build.frontend_files
+
+- name: Inspect existing NGINX ownership and CA pin
+  ansible.builtin.stat:
+    path: /etc/tms/https-ca.sha256
+  register: frontend_proxy_marker
+
+- name: Read installed packages
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse to adopt an unmanaged NGINX installation
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_marker.stat.exists or 'nginx' not in ansible_facts.packages
+    fail_msg: Existing NGINX must be migrated explicitly before this single-site playbook can manage it.
+
+- name: Read the original CA pin
+  ansible.builtin.slurp:
+    src: /etc/tms/https-ca.sha256
+  register: frontend_proxy_original_ca
+  when: frontend_proxy_marker.stat.exists
+
+- name: Reject unintended CA replacement
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_original_ca.content | b64decode | trim == tms_tls_ca_sha256
+    fail_msg: Restore the original controller TLS files; changing the CA requires an explicit migration.
+  when: frontend_proxy_marker.stat.exists
+
+- name: Create deployment directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/tms/tls
+    - /srv/tms
+    - /srv/tms/releases
+
+- name: Keep the shared TMS state directory private
+  ansible.builtin.file:
+    path: /etc/tms
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Record HTTPS management and CA identity before provisioning
+  ansible.builtin.copy:
+    content: "{{ tms_tls_ca_sha256 }}\n"
+    dest: /etc/tms/https-ca.sha256
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Install NGINX and certificate utilities
+  ansible.builtin.apt:
+    name: [nginx, openssl]
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Install the public certificates
+  ansible.builtin.copy:
+    src: "{{ tms_tls_source_directory }}/{{ item }}"
+    dest: "/etc/tms/tls/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [ca.crt, server.crt]
+  notify: Reload TMS NGINX
+
+- name: Install only the server private key
+  ansible.builtin.copy:
+    src: "{{ tms_tls_source_directory }}/server.key"
+    dest: /etc/tms/tls/server.key
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Reload TMS NGINX
+
+- name: Verify the certificate chain and hostname on the guest
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/openssl
+      - verify
+      - -CAfile
+      - /etc/tms/tls/ca.crt
+      - -purpose
+      - sslserver
+      - -verify_hostname
+      - "{{ tms_hostname }}"
+      - /etc/tms/tls/server.crt
+  changed_when: false
+
+- name: Map the canonical installation hostname inside the guest
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: '# {mark} TMS Ansible installation hostname'
+    block: '127.0.0.1 {{ tms_hostname }}'
+
+- name: Create a backend-specific copy of the Java trust store
+  ansible.builtin.copy:
+    src: "{{ tms_java_home }}/lib/security/cacerts"
+    dest: /etc/ssl/certs/tms-backend-cacerts
+    remote_src: true
+    force: false
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Check whether the installation CA is already trusted by the backend store
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -list
+      - -keystore
+      - /etc/ssl/certs/tms-backend-cacerts
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+  register: frontend_proxy_trusted_ca
+  changed_when: false
+  failed_when: frontend_proxy_trusted_ca.rc not in [0, 1]
+
+- name: Import the installation CA into the backend trust store
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -importcert
+      - -noprompt
+      - -keystore
+      - /etc/ssl/certs/tms-backend-cacerts
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+      - -file
+      - /etc/tms/tls/ca.crt
+  when: frontend_proxy_trusted_ca.rc == 1
+  changed_when: true
+
+- name: Keep the public backend trust store readable by service accounts
+  ansible.builtin.file:
+    path: /etc/ssl/certs/tms-backend-cacerts
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Export the backend store's installation CA for verification
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -exportcert
+      - -rfc
+      - -keystore
+      - /etc/ssl/certs/tms-backend-cacerts
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+  register: frontend_proxy_exported_ca
+  changed_when: false
+
+- name: Require the expected CA in the backend trust store
+  ansible.builtin.assert:
+    that:
+      - >-
+        (frontend_proxy_exported_ca.stdout | regex_replace('\\s', '')) ==
+        (lookup('ansible.builtin.file', tms_tls_source_directory ~ '/ca.crt') | regex_replace('\\s', ''))
+
+- name: Derive the immutable frontend release directory
+  ansible.builtin.set_fact:
+    frontend_proxy_release: "/srv/tms/releases/{{ frontend_proxy_build.frontend_directory.split('/')[-3] }}"
+
+- name: Copy frontend assets into a root-owned release
+  ansible.builtin.copy:
+    src: "{{ frontend_proxy_build.frontend_directory }}/"
+    dest: "{{ frontend_proxy_release }}/tms/"
+    remote_src: true
+    owner: root
+    group: root
+    mode: preserve
+    directory_mode: '0755'
+
+- name: Validate and install the complete single-site NGINX configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: /usr/sbin/nginx -t -c %s
+  notify: Reload TMS NGINX
+
+- name: Activate the validated frontend release
+  ansible.builtin.file:
+    src: "{{ frontend_proxy_release }}"
+    dest: /srv/tms/current
+    state: link
+    owner: root
+    group: root
+  notify: Reload TMS NGINX
+
+- name: Enable and start NGINX
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Apply pending NGINX changes before HTTPS checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify frontend HTTPS with hostname and CA validation
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/tms/"
+    ca_path: /etc/tms/tls/ca.crt
+    validate_certs: true
+    use_proxy: false
+    return_content: true
+    status_code: 200
+  register: frontend_proxy_https
+  retries: 10
+  delay: 3
+  until: frontend_proxy_https is succeeded
+
+- name: Require the expected frontend HTML
+  ansible.builtin.assert:
+    that:
+      - >-
+        frontend_proxy_https.content | hash('sha256') ==
+        frontend_proxy_build.frontend_files[frontend_proxy_build.frontend_directory ~ '/index.html']
+
+- name: Verify frontend routes and a missing asset
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}{{ item.path }}"
+    ca_path: /etc/tms/tls/ca.crt
+    validate_certs: true
+    use_proxy: false
+    status_code: "{{ item.status }}"
+  loop:
+    - {path: /tms/missions, status: 200}
+    - {path: /tms/assets/tms-nonexistent-test.js, status: 404}
+
+- name: Write the HTTPS stage report
+  ansible.builtin.copy:
+    dest: /etc/tms/https-report.json
+    content: "{{ frontend_proxy_report | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0640'
+  vars:
+    frontend_proxy_report:
+      origin: "{{ tms_public_origin }}"
+      release: "{{ frontend_proxy_release }}"
+      ca_sha256: "{{ tms_tls_ca_sha256 }}"
+      certificate_expires: "{{ tms_tls_server_expires }}"
+      backend_trust_store: /etc/ssl/certs/tms-backend-cacerts
+      https_frontend: passed with CA and hostname verification
+      application_login: pending Keycloak and backend installation
+
+- name: Fetch the HTTPS report
+  ansible.builtin.fetch:
+    src: /etc/tms/https-report.json
+    dest: "{{ playbook_dir }}/.local/reports/"
+    flat: false
+
+- name: Report HTTPS readiness
+  ansible.builtin.debug:
+    msg:
+      - "Frontend assets are served at {{ tms_public_origin }}/tms/."
+      - TLS verification and frontend routing checks passed.
+      - Login remains unavailable until Keycloak and the backend are installed.
