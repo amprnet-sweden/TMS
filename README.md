@@ -718,6 +718,7 @@ Paste the client secret into an environment variable.
 ```
 CLIENT_ID=curl
 CLIENT_SECRET=the-client-secret-that-you-copied-from-keycloak
+MISSION_ID=the-id-of-the-mission-you-want-to-access (can be found in TMS web UI)
 ```
 
 In Keycloak still on the curl client details page, select the tab **Service account roles** and assign a **tms-xxxxx** role to the client.
@@ -756,7 +757,7 @@ Now that you have the access token in an environment variable, it's easy to make
 
 **List incidents**
 
-`curl -v -H "Authorization: Bearer $JWT" https://tms.mydomain.se/api/incidents`
+`curl -v -H "Authorization: Bearer $JWT" -H "x-tms-mission: $MISSION_ID" https://tms.mydomain.se/api/incidents`
 
 **Create incident**
 
