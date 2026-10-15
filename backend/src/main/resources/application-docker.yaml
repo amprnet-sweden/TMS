@@ -4,10 +4,6 @@ server:
 spring:
   application:
     name: tms
-  data:
-    jdbc:
-      dialect: mysql
-      #dialect: h2
   datasource:
     url: jdbc:mariadb://mariadb:3306/tms
     username: root
@@ -18,7 +14,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: https://host.docker.internal:9003/auth/realms/amprnet
+          issuer-uri: http://keycloak:8080/auth/realms/amprnet
+          #issuer-uri: https://host.docker.internal:9003/auth/realms/amprnet
           jwk-set-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs"
         #opaque-token:
         #  introspection-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/token/introspect"

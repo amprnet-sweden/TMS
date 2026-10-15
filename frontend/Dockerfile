@@ -1,4 +1,4 @@
-FROM node:20.19-alpine3.22 AS builder
+FROM node:22.23.3-alpine3.24 AS builder
 
 ENV NODE_ENV=production
 
@@ -17,7 +17,7 @@ COPY index.html .
 RUN npm install --include=dev
 RUN npm run build
 
-FROM nginx:1.29-alpine
+FROM nginx:1.31.7-alpine-slim
 
 COPY --from=builder --chown=nginx:nginx /usr/src/app/dist/ /usr/share/nginx/html/tms
 

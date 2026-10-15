@@ -17,18 +17,28 @@
 
 package se.amprnet.tms.model;
 
-import com.fasterxml.jackson.core.JacksonException;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
 import io.github.thibaultmeyer.cuid.CUID;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.deser.std.StdScalarDeserializer;
 
-import java.io.IOException;
+public class CuidDeserializer extends StdScalarDeserializer<CUID> {
 
-public class CuidDeserializer extends JsonDeserializer<CUID> {
+    public CuidDeserializer() {
+        super(CUID.class);
+    }
 
     @Override
-    public CUID deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JacksonException {
-        return CUID.fromString(p.readValueAs(String.class));
+    public CUID deserialize(JsonParser p, DeserializationContext ctx) {
+        if (!p.hasToken(JsonToken.VALUE_STRING)) {
+            return (CUID) ctx.handleUnexpectedToken(CUID.class, p);
+        }
+        String text = p.getString();
+        try {
+            return CUID.fromString(text);
+        } catch (IllegalArgumentException e) {
+            return (CUID) ctx.handleWeirdStringValue(CUID.class, text, e.getMessage());
+        }
     }
 }

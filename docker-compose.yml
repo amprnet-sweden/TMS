@@ -12,7 +12,7 @@ services:
   #    - tms
 
   mariadb:
-    image: mariadb:10.11.15
+    image: mariadb:10.11.19
     environment:
       MYSQL_DATABASE: tms
       #MYSQL_USER: test
@@ -24,7 +24,7 @@ services:
       - tms
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.7
+    image: quay.io/keycloak/keycloak:26.8.1
     restart: on-failure
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
