@@ -751,6 +751,14 @@ Set an environment variable to the access token value.
 
 `JWT="eyJhbGciOiJSUzI1NiIs......."`
 
+Or use the following command to set the JWT variable automatically using curl and jq.
+
+```
+JWT=`curl -sk -X POST -H 'Content-Type: application/x-www-form-urlencoded' -d grant_type=client_credentials \
+    -d client_id=$CLIENT_ID -d client_secret=$CLIENT_SECRET \
+    https://tms.mydomain.se/auth/realms/amprnet/protocol/openid-connect/token | jq -j '.access_token'`
+```
+
 ## Make calls to the API
 
 Now that you have the access token in an environment variable, it's easy to make cURL calls to the REST API.
