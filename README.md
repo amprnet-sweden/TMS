@@ -180,11 +180,11 @@ Keycloak is tricky because hostnames need to match the hostname in the TLS certi
 For the *Role Base Security* to work you must ensure that **Add to userinfo** is enabled in Keycloak
 `Client scopes "roles" -> Mappers "realm roles"`
 
-## Native installation with Ansible (preview)
+## Native installation with Ansible
 
 For a dedicated Debian 13 ARM64 host, see the [Ansible installer](ansible/README.md).
 It builds and installs the application, database, identity service and HTTPS proxy.
-The documentation lists tested behavior and remaining acceptance work.
+The guide covers installation, resource profiles, validation and operational limits.
 
 ## Build from source code  (the hard way)
 
