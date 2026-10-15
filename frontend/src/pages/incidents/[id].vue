@@ -234,6 +234,8 @@ function clearLocation() {
   }
 }
 
+const settings = computed(() => JSON.parse(localStorage.getItem('settings')))
+
 const markerOptions = undefined //{iconUrl: '@/assets/leaflet/marker-icon.png', shadowUrl: '@/assets/leaflet/marker-shadow.png'}
 
 function renderMap(currentLocation) {
@@ -241,7 +243,7 @@ function renderMap(currentLocation) {
   const target = location.value || (edit.value ? defaultLocation.value : null)
 
   if (initialMap.value) {
-    initialMap.value.setView(center, 12)
+    initialMap.value.setView(center, settings.value.frontend.map.zoom)
     if (target) {
       if (marker.value) {
         marker.value.setLatLng(target)
@@ -252,13 +254,13 @@ function renderMap(currentLocation) {
   } else if (center) {
     nextTick(() => {
       const map = L.map('themap', {scrollWheelZoom: false}).setView(center, 12)
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+      L.tileLayer(settings.value.frontend.map.tiles, {
+        maxZoom: settings.value.frontend.map.maxZoom,
         attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }).addTo(map)
       map.on('click', function ({latlng}) {
         if (edit.value) {
-          initialMap.value.setView(latlng, Math.max(15, initialMap.value.getZoom()))
+          initialMap.value.setView(latlng, Math.max(settings.value.frontend.map.zoom + 3, initialMap.value.getZoom()))
           setLocation(latlng.lat, latlng.lng)
           if (marker.value) {
             marker.value.setLatLng(latlng)
