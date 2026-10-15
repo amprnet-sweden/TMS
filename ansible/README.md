@@ -1,4 +1,4 @@
-# Native installation (preview)
+# Native installation
 
 Installs TMS on a dedicated **Debian 13 ARM64** host:
 Java 21, Node 22, MariaDB 11.8, Keycloak 26.4.7, NGINX, frontend and backend.
@@ -8,15 +8,13 @@ HTTPS, including WebSocket forwarding.
 The standard profile requires 4 GiB RAM; an experimental 1 GB profile is
 described below.
 
-This is an initial-installation contribution for review. Component playbooks
-passed repeated zero-change runs on an emulated ARM64 VM. Browser login,
-incident persistence, live updates between windows and recovery after reboot
-were verified on that VM. A clean installation using this consolidated entry
-point passed on a physical 1 GB Raspberry Pi 3 using the experimental profile:
-on-target builds, API/STOMP checks, a zero-change rerun and automatic recovery
-after reboot. Browser login/logout, saves and live updates passed, including
-saves and live updates after reboot. Capacity testing and backup restoration
-are outside this contribution's validation scope.
+Installation and functional checks passed on an emulated ARM64 VM and a
+physical 1 GB Raspberry Pi 3 using the experimental profile. Validation covered
+on-target builds, API/STOMP checks, repeated runs with no changes, browser
+login/logout, incident saves, live updates between windows and automatic
+recovery after reboot. Browser saves and live updates also passed after reboot
+on the Pi. These checks cover installation and functional use; sustained
+workload capacity and backup restoration have not been validated.
 
 ## Install
 
@@ -45,8 +43,8 @@ Builds skip Docker-dependent backend tests. No Docker installation is required.
 The configured DNS hostname must resolve to the target from browsers. The
 HTTPS port must be reachable and identical externally and on the target; do
 not remap it through NAT. The playbook maps that hostname to loopback inside
-the target. HTTP redirect, public certificate issuance and firewall management
-are outside this preview.
+the target. Configure HTTP redirect, public certificate issuance and firewall
+rules separately if required; the installer does not manage them.
 
 The installer creates a private CA restricted to that hostname. Import the
 public `.local/tms-installation-ca.crt` into your browser/OS trust store.
@@ -65,10 +63,10 @@ bootstrap administrator is removed after permanent administrator verification.
 
 ## Experimental 1 GB ARM64 profile
 
-For hardware validation on a 1 GB Debian 13 ARM64 host, explicitly add
+To install on a 1 GB Debian 13 ARM64 host, explicitly add
 `"tms_resource_profile": "pi_1gb_experimental"` to deployment.json.
 Omitting this setting selects `standard` and retains the 4 GB requirement.
-The experimental profile requires at least 850 MiB usable RAM and uses trial
+The experimental profile requires at least 850 MiB usable RAM and uses
 256 MiB heaps for each Java service, one Gradle worker, bounded build heaps,
 and a smaller MariaDB buffer pool. JVM native memory is additional to heap.
 Installation and functional checks passed on a physical 1 GB Pi 3 with
@@ -78,7 +76,8 @@ the result does not establish sustained workload capacity.
 The installer does not add or resize swap. On-target builds may be slow or
 fail on this hardware. Measure memory pressure, service restarts and latency
 during installation, concurrent browser use and reboot recovery before
-relying on the profile. A separate build-host workflow is not implemented yet.
+relying on the profile. Application builds run on the target; the installer
+does not support a separate build host.
 
 Read-only eligibility and sudo verification can be run before installation:
 
@@ -97,15 +96,16 @@ stored alongside the encrypted vault with private filesystem permissions;
 protect backups of both as credentials. Never commit these directories.
 
 `.local/` contains generated archives, public CA, variables and reports and is
-ignored by Git. Reports omit credentials. No application backup/restore or
-upgrade workflow is provided yet; a changed installed backend artifact is
-rejected rather than silently upgraded. Keep this preview on a disposable host
-until those workflows and hardware acceptance are completed.
+ignored by Git. Reports omit credentials. The installer handles initial
+installation and repeat runs with the same application artifacts. It does not
+provide application backup/restore or upgrades; a changed installed backend
+artifact is rejected. Plan application backups, restoration and upgrades
+separately when operating a deployment.
 
 Checks cover artifact hashes, database account isolation, HTTPS validation,
 Keycloak permissions and assets, migrations, authenticated API reads and STOMP
-authentication. Browser writes and two-window live updates require acceptance
-testing on the resulting deployment.
+authentication. Browser writes and two-window live updates are manual checks
+and are not part of the automated installer checks.
 
 ## Development checks
 
