@@ -67,6 +67,8 @@ function createKeycloak() {
                 const roles = info.realm_access?.roles || []
                 localStorage.setItem('user', JSON.stringify({ username: info.preferred_username, email: info.email, firstName: info.given_name, lastName: info.family_name, name: info.name, sub: info.sub, roles }))
               })
+              .then(() => backend.get("/settings"))
+              .then(({data}) => localStorage.setItem('settings', JSON.stringify(data)))
               .then(() => backend.get("/user"))
               .then(() => resolve(keycloak))
               .catch(reject)
