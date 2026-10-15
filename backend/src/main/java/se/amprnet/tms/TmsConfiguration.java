@@ -33,6 +33,7 @@ public class TmsConfiguration {
     private boolean demo = false;
     private List<String> allowedOrigins = new ArrayList<>();
     private KeycloakConfiguration keycloak;
+    private FrontendConfiguration  frontend = new FrontendConfiguration();
 
     public String getTenant() {
         return tenant;
@@ -64,6 +65,14 @@ public class TmsConfiguration {
 
     public void setKeycloak(KeycloakConfiguration keycloak) {
         this.keycloak = keycloak;
+    }
+
+    public FrontendConfiguration getFrontend() {
+        return frontend;
+    }
+
+    public void setFrontend(FrontendConfiguration frontend) {
+        this.frontend = frontend;
     }
 
     @Configuration
@@ -113,6 +122,65 @@ public class TmsConfiguration {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+    }
+
+    @Configuration
+    @ConfigurationProperties("frontend")
+    public static class FrontendConfiguration {
+
+        private MapConfiguration map = new MapConfiguration();
+
+        public MapConfiguration getMap() {
+            return map;
+        }
+
+        public void setMap(MapConfiguration map) {
+            this.map = map;
+        }
+
+        @Configuration
+        @ConfigurationProperties("map")
+        public static class MapConfiguration {
+            private String tiles = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+            private int zoom = 12;
+            private int maxZoom = 19;
+            private LatLng center = new LatLng(59.328893326719275, 18.16224786713087);
+
+            public String getTiles() {
+                return tiles;
+            }
+
+            public void setTiles(String tiles) {
+                this.tiles = tiles;
+            }
+
+            public int getZoom() {
+                return zoom;
+            }
+
+            public void setZoom(int zoom) {
+                this.zoom = zoom;
+            }
+
+            public int getMaxZoom() {
+                return maxZoom;
+            }
+
+            public void setMaxZoom(int maxZoom) {
+                this.maxZoom = maxZoom;
+            }
+
+            public LatLng getCenter() {
+                return center;
+            }
+
+            public void setCenter(LatLng center) {
+                this.center = center;
+            }
+
+            public record LatLng(double lat, double lng) {
+            }
         }
     }
 }
