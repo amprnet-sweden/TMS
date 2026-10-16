@@ -14,9 +14,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://keycloak:8080/auth/realms/amprnet
-          #issuer-uri: https://host.docker.internal:9003/auth/realms/amprnet
-          jwk-set-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/certs"
+          issuer-uri: https://host.docker.internal:9003/auth/realms/amprnet
+          jwk-set-uri: http://keycloak:8080/auth/realms/amprnet/protocol/openid-connect/certs
         #opaque-token:
         #  introspection-uri: "${spring.security.oauth2.resourceserver.jwt.issuer-uri}/protocol/openid-connect/token/introspect"
         #  client-id: tms-backend
