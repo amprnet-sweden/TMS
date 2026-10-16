@@ -34,7 +34,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation 'org.springframework.security:spring-security-messaging'
-    implementation 'org.liquibase:liquibase-core'
+    implementation 'org.springframework.boot:spring-boot-starter-liquibase'
     implementation 'io.github.thibaultmeyer:cuid:2.0.5'
     implementation 'org.keycloak:keycloak-admin-client:26.0.12'
 
