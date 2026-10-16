@@ -32,8 +32,8 @@ public class TmsConfiguration {
     private String tenant;
     private boolean demo = false;
     private List<String> allowedOrigins = new ArrayList<>();
-    private KeycloakConfiguration keycloak;
-    private FrontendConfiguration  frontend = new FrontendConfiguration();
+    private KeycloakConfiguration keycloak = new KeycloakConfiguration();
+    private FrontendConfiguration frontend = new FrontendConfiguration();
 
     public String getTenant() {
         return tenant;
@@ -75,13 +75,11 @@ public class TmsConfiguration {
         this.frontend = frontend;
     }
 
-    @Configuration
-    @ConfigurationProperties("keycloak")
     public static class KeycloakConfiguration {
-        private String uri = "https://tms.amprnet.se/auth";
+        private String uri = "https://host.docker.internal:9003/auth";
         private String realm = "amprnet";
         private String clientId = "admin-cli";
-        private String username = "tms-kc-admin@ab.amprnet.se";
+        private String username = "tms";
         private String password = "secret";
 
         public String getUri() {
@@ -125,8 +123,6 @@ public class TmsConfiguration {
         }
     }
 
-    @Configuration
-    @ConfigurationProperties("frontend")
     public static class FrontendConfiguration {
 
         private MapConfiguration map = new MapConfiguration();
@@ -139,8 +135,6 @@ public class TmsConfiguration {
             this.map = map;
         }
 
-        @Configuration
-        @ConfigurationProperties("map")
         public static class MapConfiguration {
             private String tiles = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
             private int zoom = 12;
