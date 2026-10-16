@@ -252,7 +252,7 @@ function renderMap(currentLocation) {
     }
   } else if (center) {
     nextTick(() => {
-      const map = L.map('themap', {scrollWheelZoom: false}).setView(center, 12)
+      const map = L.map('themap', {scrollWheelZoom: false}).setView(center, mapSettings.value.zoom)
       L.tileLayer(mapSettings.value.tiles, {
         maxZoom: mapSettings.value.maxZoom,
         attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
