@@ -32,8 +32,8 @@ def main():
     local = ansible / ".local"
     local.mkdir(exist_ok=True)
     build = (root / "backend/build.gradle").read_text()
-    if not re.search(r"JavaLanguageVersion\.of\(21\)", build):
-        raise SystemExit("The source must select the Java 21 compiler before building.")
+    if not re.search(r"JavaLanguageVersion\.of\(25\)", build):
+        raise SystemExit("The source must select the Java 25 compiler before building.")
     package = json.loads((root / "frontend/package.json").read_text())
     lock_path = root / "frontend/package-lock.json"
     if not lock_path.exists():

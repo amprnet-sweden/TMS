@@ -1,7 +1,7 @@
 # Native installation
 
 Installs TMS on a dedicated **Debian 13 ARM64** host:
-Java 21, Node 22, MariaDB 11.8, Keycloak 26.4.7, NGINX, frontend and backend.
+Java 25, Node 22, MariaDB 11.8, Keycloak 26.4.7, NGINX, frontend and backend.
 Application builds run under an unprivileged account; services use separate
 accounts. Databases and application listeners bind to loopback. NGINX provides
 HTTPS, including WebSocket forwarding.
@@ -116,7 +116,7 @@ ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
   "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml site.yml --syntax-check
 ```
 
-Run the backend authentication regression tests separately with Java 21:
+Run the backend authentication regression tests separately with Java 25:
 `./gradlew test --tests se.amprnet.tms.messaging.WebSocketAuthenticatorServiceTests`
 from `backend/`. The installer pins its controller, Node and Keycloak versions;
 review and update those pins deliberately.

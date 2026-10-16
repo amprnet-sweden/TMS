@@ -53,8 +53,8 @@ class ResourceTests(unittest.TestCase):
         environment.filters['to_json'] = json.dumps
         environment.filters['hash'] = lambda value, algorithm: hashlib.new(algorithm, value.encode()).hexdigest()
         values = dict(tms_source_sha256='source', tms_build_recipe_sha256='recipe',
-                      build_tools_java_version={'stderr': 'java21'},
-                      build_tools_compiler_version={'stdout': 'javac21'},
+                      build_tools_java_version={'stderr': 'java25'},
+                      build_tools_compiler_version={'stdout': 'javac25'},
                       tms_backend_tests='skipped', tms_node_sha256='node',
                       tms_public_origin='https://service.example.test')
         for expression in task['ansible.builtin.set_fact'].values():

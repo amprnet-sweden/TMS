@@ -64,7 +64,7 @@ def verify(origin, password, opener, websocket_check=None):
 
 def websocket_check(origin, token):
     result = subprocess.run([
-        '/usr/lib/jvm/java-21-openjdk-arm64/bin/java',
+        '/usr/lib/jvm/java-25-openjdk-arm64/bin/java',
         '-Djavax.net.ssl.trustStore=/etc/ssl/certs/tms-backend-cacerts',
         '-Djavax.net.ssl.trustStorePassword=changeit',
         '/usr/local/lib/tms-ansible/WebSocketProbe.java', origin],
