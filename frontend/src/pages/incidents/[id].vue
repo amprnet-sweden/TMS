@@ -109,7 +109,11 @@ const comments = ref([])
 const selectedComment = ref(null)
 const initialMap = ref(null)
 const marker = ref(null)
-const defaultLocation = [59.328893326719275, 18.16224786713087]
+
+const store = useUserStore()
+const userId = computed(() => store.user?.id)
+const mapSettings = computed(() => store.settings?.frontend?.map)
+const defaultLocation = [mapSettings.value.latitude, mapSettings.value.longitude]
 const location = computed(() => {
   if (model.value?.latitude) {
     return [model.value.latitude, model.value.longitude]
@@ -122,9 +126,6 @@ const coords = computed(() => {
   }
   return null
 })
-
-const store = useUserStore()
-const userId = computed(() => store.user?.id)
 
 async function fetchMetadata() {
   return api.get(`/missions/${getMissionId()}/members`)
@@ -234,16 +235,14 @@ function clearLocation() {
   }
 }
 
-const settings = computed(() => JSON.parse(localStorage.getItem('settings')))
-
 const markerOptions = undefined //{iconUrl: '@/assets/leaflet/marker-icon.png', shadowUrl: '@/assets/leaflet/marker-shadow.png'}
 
 function renderMap(currentLocation) {
   const center = location.value || currentLocation || defaultLocation
-  const target = location.value || (edit.value ? defaultLocation.value : null)
+  const target = location.value || (edit.value ? defaultLocation : null)
 
   if (initialMap.value) {
-    initialMap.value.setView(center, settings.value.frontend.map.zoom)
+    initialMap.value.setView(center, mapSettings.value.zoom)
     if (target) {
       if (marker.value) {
         marker.value.setLatLng(target)
@@ -254,13 +253,13 @@ function renderMap(currentLocation) {
   } else if (center) {
     nextTick(() => {
       const map = L.map('themap', {scrollWheelZoom: false}).setView(center, 12)
-      L.tileLayer(settings.value.frontend.map.tiles, {
-        maxZoom: settings.value.frontend.map.maxZoom,
+      L.tileLayer(mapSettings.value.tiles, {
+        maxZoom: mapSettings.value.maxZoom,
         attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }).addTo(map)
       map.on('click', function ({latlng}) {
         if (edit.value) {
-          initialMap.value.setView(latlng, Math.max(settings.value.frontend.map.zoom + 3, initialMap.value.getZoom()))
+          initialMap.value.setView(latlng, Math.max(mapSettings.value.zoom + 3, initialMap.value.getZoom()))
           setLocation(latlng.lat, latlng.lng)
           if (marker.value) {
             marker.value.setLatLng(latlng)

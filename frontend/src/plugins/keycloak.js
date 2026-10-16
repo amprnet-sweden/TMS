@@ -1,6 +1,7 @@
 import Keycloak from 'keycloak-js'
 import backend from '@/plugins/api'
 import * as role from "@/roles";
+import {useUserStore} from '@/plugins/stores'
 
 export function hasRole(role) {
   const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -62,14 +63,17 @@ function createKeycloak() {
               })
             }, 60000)
 
+            const store = useUserStore()
+
             keycloak.loadUserInfo()
               .then(info => {
                 const roles = info.realm_access?.roles || []
                 localStorage.setItem('user', JSON.stringify({ username: info.preferred_username, email: info.email, firstName: info.given_name, lastName: info.family_name, name: info.name, sub: info.sub, roles }))
               })
-              .then(() => backend.get("/settings"))
-              .then(({data}) => localStorage.setItem('settings', JSON.stringify(data)))
               .then(() => backend.get("/user"))
+              .then((user) => store.$patch({user}))
+              .then(() => backend.get("/settings"))
+              .then(({data}) => store.$patch( {settings: data}))
               .then(() => resolve(keycloak))
               .catch(reject)
           } else {
