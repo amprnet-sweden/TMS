@@ -46,8 +46,7 @@ jobs:
         with:
           file: ./frontend/Dockerfile
           context: ./frontend
-          #platforms: linux/amd64
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -109,8 +108,7 @@ jobs:
         with:
           file: ./backend/Dockerfile
           context: ./backend
-          #platforms: linux/amd64
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64
           build-args: JAR=tms-backend-${{ env.RELEASE_VERSION }}.jar
           push: false
           tags: ${{ steps.meta.outputs.tags }}
