@@ -8,7 +8,7 @@ WORKDIR /usr/src/app
 COPY package.json .
 COPY jsconfig.json .
 COPY vite.config.mjs .
-COPY .env.production .
+COPY .env .env.production
 COPY .eslintrc.js .
 COPY public ./public
 COPY src ./src
