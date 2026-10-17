@@ -1,0 +1,44 @@
+name: Native installer checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ./ansible
+        shell: bash
+    env:
+      TMS_CONTROLLER_DIR: ${{ github.workspace }}/ansible/.local/controller
+      ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/.local/collections
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned controller dependencies
+        run: bash scripts/setup-controller.sh
+
+      - name: Run Python helper tests
+        run: '"$TMS_CONTROLLER_DIR/venv/bin/python" -m unittest discover -s tests -v'
+
+      - name: Install pinned Ansible collections
+        run: '"$TMS_CONTROLLER_DIR/venv/bin/ansible-galaxy" collection install -r requirements.yml -p .local/collections'
+
+      - name: Check playbook syntax for both resource profiles
+        run: |
+          for profile in standard pi_1gb_experimental; do
+            "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
+              site.yml --syntax-check -e "tms_resource_profile=$profile" || exit
+          done
+
+      - name: Check shell syntax
+        run: bash -n install.sh scripts/setup-controller.sh
