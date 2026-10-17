@@ -7,6 +7,7 @@
   become: true
   gather_facts: false
   vars_files:
+    - vars/common.yml
     - vars/build.yml
     - vars/keycloak.yml
   pre_tasks:

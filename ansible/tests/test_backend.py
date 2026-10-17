@@ -77,9 +77,12 @@ class BackendTests(unittest.TestCase):
         config = yaml.safe_load(rendered)
         self.assertEqual(config['server']['address'], '127.0.0.1')
         self.assertFalse(config['tms']['demo'])
-        self.assertEqual(config['keycloak']['uri'], 'https://tms.example.test:8443/auth')
-        self.assertEqual(config['keycloak']['password'], '${TMS_KEYCLOAK_LOOKUP_PASSWORD}')
+        self.assertNotIn('keycloak', config)
+        self.assertEqual(config['tms']['keycloak']['uri'], 'https://tms.example.test:8443/auth')
+        self.assertEqual(config['tms']['keycloak']['password'], '${TMS_KEYCLOAK_LOOKUP_PASSWORD}')
         self.assertEqual(config['spring']['datasource']['password'], '${TMS_DATABASE_PASSWORD}')
+        # Let the MariaDB connection select its own dialect under Spring Boot 4.
+        self.assertNotIn('dialect', config['spring'].get('data', {}).get('jdbc', {}))
         jwt = config['spring']['security']['oauth2']['resourceserver']['jwt']
         self.assertEqual(jwt['jwk-set-uri'], jwt['issuer-uri'] + '/protocol/openid-connect/certs')
 

@@ -1,24 +1,35 @@
 ---
 - name: Read the existing build and database ownership reports
   ansible.builtin.slurp:
-    src: "{{ item }}"
+    src: "{{ item.path }}"
   loop:
-    - /var/lib/tms-build/build-report.json
-    - /etc/tms/database-owner.json
-    - /etc/tms/keycloak-ready
-  register: backend_inputs
+    - name: build_report
+      path: "{{ tms_build_root }}/build-report.json"
+    - name: database_owner
+      path: "{{ tms_database_state_directory }}/database-owner.json"
+    - name: keycloak_ready
+      path: "{{ tms_database_state_directory }}/keycloak-ready"
+  loop_control:
+    label: "{{ item.name }}"
+  register: backend_inputs_inspection
+
+- name: Index backend inputs by name
+  ansible.builtin.set_fact:
+    backend_inputs: >-
+      {{ dict(backend_inputs_inspection.results | map(attribute='item.name') |
+              zip(backend_inputs_inspection.results | map(attribute='content'))) }}
 
 - name: Decode the successful build report
   ansible.builtin.set_fact:
-    backend_build: "{{ backend_inputs.results[0].content | b64decode | from_json }}"
+    backend_build: "{{ backend_inputs.build_report | b64decode | from_json }}"
 
 - name: Require the original deployment and a managed source artifact
   ansible.builtin.assert:
     that:
-      - (backend_inputs.results[1].content | b64decode | from_json).deployment_id == tms_database_deployment_id
-      - backend_inputs.results[2].content | b64decode | trim == tms_database_deployment_id
+      - (backend_inputs.database_owner | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - backend_inputs.keycloak_ready | b64decode | trim == tms_database_deployment_id
       - backend_build.public_origin == tms_public_origin
-      - backend_build.backend_jar is match('^/var/lib/tms-build/backend/[a-f0-9]{64}/backend/app.jar$')
+      - backend_build.backend_jar is match('^' ~ (tms_build_root | regex_escape) ~ '/backend/[a-f0-9]{64}/backend/app.jar$')
       - backend_build.backend_sha256 is match('^[a-f0-9]{64}$')
 
 - name: Verify the built JAR checksum before deployment
@@ -36,15 +47,29 @@
 
 - name: Inspect backend ownership and prerequisite paths
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
   loop:
-    - /etc/tms/backend-owner.json
-    - /opt/tms-backend
-    - /etc/tms-backend
-    - /var/lib/tms-backend
-    - /etc/systemd/system/tms-backend.service
-    - /etc/ssl/certs/tms-backend-cacerts
-  register: backend_paths
+    - name: owner
+      path: "{{ tms_database_state_directory }}/backend-owner.json"
+    - name: installation
+      path: /opt/tms-backend
+    - name: configuration
+      path: /etc/tms-backend
+    - name: data
+      path: /var/lib/tms-backend
+    - name: service
+      path: /etc/systemd/system/tms-backend.service
+    - name: trust_store
+      path: "{{ tms_backend_trust_store }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: backend_paths_inspection
+
+- name: Index backend paths by name
+  ansible.builtin.set_fact:
+    backend_paths: >-
+      {{ dict(backend_paths_inspection.results | map(attribute='item.name') |
+              zip(backend_paths_inspection.results | map(attribute='stat'))) }}
 
 - name: Inspect the existing backend service account
   ansible.builtin.getent:
@@ -55,19 +80,19 @@
 - name: Require Java trust and refuse an unmanaged backend installation
   ansible.builtin.assert:
     that:
-      - backend_paths.results[5].stat.isreg | default(false)
+      - backend_paths.trust_store.isreg | default(false)
       - >-
-        backend_paths.results[0].stat.exists or
-        (not backend_paths.results[1].stat.exists and not backend_paths.results[2].stat.exists
-         and not backend_paths.results[3].stat.exists and not backend_paths.results[4].stat.exists
+        backend_paths.owner.exists or
+        (not backend_paths.installation.exists and not backend_paths.configuration.exists
+         and not backend_paths.data.exists and not backend_paths.service.exists
          and not ansible_facts.getent_passwd['tms-backend'])
     fail_msg: Complete HTTPS setup first. Existing unmanaged backend files or accounts require explicit migration.
 
 - name: Read the existing backend ownership record
   ansible.builtin.slurp:
-    src: /etc/tms/backend-owner.json
+    src: "{{ tms_database_state_directory }}/backend-owner.json"
   register: backend_owner
-  when: backend_paths.results[0].stat.exists
+  when: backend_paths.owner.exists
 
 - name: Reject a different vault or implicit application upgrade
   ansible.builtin.assert:
@@ -75,26 +100,26 @@
       - (backend_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
       - (backend_owner.content | b64decode | from_json).backend_sha256 == backend_build.backend_sha256
     fail_msg: This installation stage preserves its original release. Application upgrades require a backup and migration procedure.
-  when: backend_paths.results[0].stat.exists
+  when: backend_paths.owner.exists
 
 - name: Inspect the application database before the first installation
   ansible.mariadb.mariadb_query:
     login_user: root
-    login_unix_socket: /run/mysqld/mysqld.sock
+    login_unix_socket: "{{ tms_database_socket }}"
     config_file: ''
     query: SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = 'tms'
   register: backend_tables
-  when: not backend_paths.results[0].stat.exists
+  when: not backend_paths.owner.exists
 
 - name: Refuse to adopt an existing application database
   ansible.builtin.assert:
     that:
       - backend_tables.query_result[0][0].table_count | int == 0
-  when: not backend_paths.results[0].stat.exists
+  when: not backend_paths.owner.exists
 
 - name: Record ownership before provisioning so interrupted runs can resume
   ansible.builtin.copy:
-    dest: /etc/tms/backend-owner.json
+    dest: "{{ tms_database_state_directory }}/backend-owner.json"
     content: "{{ {'deployment_id': tms_database_deployment_id, 'backend_sha256': backend_build.backend_sha256} | to_nice_json }}\n"
     owner: root
     group: root
@@ -175,7 +200,7 @@
 - name: Install the root-readable service credentials
   ansible.builtin.template:
     src: backend.env.j2
-    dest: /etc/tms/backend.env
+    dest: "{{ tms_database_state_directory }}/backend.env"
     owner: root
     group: root
     mode: '0600'
@@ -214,7 +239,7 @@
 - name: Wait for backend health through verified HTTPS
   ansible.builtin.uri:
     url: "{{ tms_public_origin }}/api/actuator/health"
-    ca_path: /etc/tms/tls/ca.crt
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
     validate_certs: true
     use_proxy: false
     timeout: 30
@@ -226,7 +251,7 @@
 - name: Verify that Liquibase applied application migrations
   ansible.mariadb.mariadb_query:
     login_user: root
-    login_unix_socket: /run/mysqld/mysqld.sock
+    login_unix_socket: "{{ tms_database_socket }}"
     config_file: ''
     query: SELECT COUNT(*) AS applied_changes FROM tms.DATABASECHANGELOG
   register: backend_migrations
@@ -252,7 +277,10 @@
     argv:
       - /usr/bin/python3
       - /usr/local/lib/tms-ansible/verify-backend.py
-    stdin: "{{ {'origin': tms_public_origin, 'password': tms_keycloak_operator_password} | to_json }}"
+    stdin: >-
+      {{ {'origin': tms_public_origin, 'password': tms_keycloak_operator_password,
+          'java_executable': tms_java_home ~ '/bin/java', 'trust_store': tms_backend_trust_store,
+          'ca_file': tms_tls_directory ~ '/ca.crt'} | to_json }}
   register: backend_verification
   changed_when: false
   failed_when: false
@@ -266,7 +294,7 @@
 
 - name: Write the backend report without credentials or application records
   ansible.builtin.copy:
-    dest: /etc/tms/backend-report.json
+    dest: "{{ tms_database_state_directory }}/backend-report.json"
     content: >-
       {{ {'backend_sha256': backend_build.backend_sha256, 'public_origin': tms_public_origin,
           'source_sha256': backend_build.source_sha256, 'java_home': tms_java_home,
@@ -279,7 +307,7 @@
 
 - name: Fetch the backend verification report
   ansible.builtin.fetch:
-    src: /etc/tms/backend-report.json
+    src: "{{ tms_database_state_directory }}/backend-report.json"
     dest: "{{ playbook_dir }}/.local/reports/"
 
 - name: Report backend readiness

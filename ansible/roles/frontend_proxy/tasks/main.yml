@@ -1,7 +1,7 @@
 ---
 - name: Read the successful build report
   ansible.builtin.slurp:
-    src: /var/lib/tms-build/build-report.json
+    src: "{{ tms_build_root }}/build-report.json"
   register: frontend_proxy_report_file
 
 - name: Decode the build report
@@ -12,7 +12,7 @@
   ansible.builtin.assert:
     that:
       - frontend_proxy_build.public_origin == tms_public_origin
-      - frontend_proxy_build.frontend_directory is match('^/var/lib/tms-build/frontend/[a-f0-9]{64}/frontend/dist$')
+      - frontend_proxy_build.frontend_directory is match('^' ~ (tms_build_root | regex_escape) ~ '/frontend/[a-f0-9]{64}/frontend/dist$')
       - frontend_proxy_build.frontend_files | length > 0
 
 - name: Verify all source frontend checksums
@@ -43,7 +43,7 @@
 
 - name: Inspect existing NGINX ownership and CA pin
   ansible.builtin.stat:
-    path: /etc/tms/https-ca.sha256
+    path: "{{ tms_database_state_directory }}/https-ca.sha256"
   register: frontend_proxy_marker
 
 - name: Read installed packages
@@ -58,7 +58,7 @@
 
 - name: Read the original CA pin
   ansible.builtin.slurp:
-    src: /etc/tms/https-ca.sha256
+    src: "{{ tms_database_state_directory }}/https-ca.sha256"
   register: frontend_proxy_original_ca
   when: frontend_proxy_marker.stat.exists
 
@@ -77,13 +77,13 @@
     group: root
     mode: '0755'
   loop:
-    - /etc/tms/tls
+    - "{{ tms_tls_directory }}"
     - /srv/tms
     - /srv/tms/releases
 
 - name: Keep the shared TMS state directory private
   ansible.builtin.file:
-    path: /etc/tms
+    path: "{{ tms_database_state_directory }}"
     state: directory
     owner: root
     group: root
@@ -92,7 +92,7 @@
 - name: Record HTTPS management and CA identity before provisioning
   ansible.builtin.copy:
     content: "{{ tms_tls_ca_sha256 }}\n"
-    dest: /etc/tms/https-ca.sha256
+    dest: "{{ tms_database_state_directory }}/https-ca.sha256"
     owner: root
     group: root
     mode: '0600'
@@ -108,7 +108,7 @@
 - name: Install the public certificates
   ansible.builtin.copy:
     src: "{{ tms_tls_source_directory }}/{{ item }}"
-    dest: "/etc/tms/tls/{{ item }}"
+    dest: "{{ tms_tls_directory }}/{{ item }}"
     owner: root
     group: root
     mode: '0644'
@@ -118,7 +118,7 @@
 - name: Install only the server private key
   ansible.builtin.copy:
     src: "{{ tms_tls_source_directory }}/server.key"
-    dest: /etc/tms/tls/server.key
+    dest: "{{ tms_tls_directory }}/server.key"
     owner: root
     group: root
     mode: '0600'
@@ -132,12 +132,12 @@
       - /usr/bin/openssl
       - verify
       - -CAfile
-      - /etc/tms/tls/ca.crt
+      - "{{ tms_tls_directory }}/ca.crt"
       - -purpose
       - sslserver
       - -verify_hostname
       - "{{ tms_hostname }}"
-      - /etc/tms/tls/server.crt
+      - "{{ tms_tls_directory }}/server.crt"
   changed_when: false
 
 - name: Map the canonical installation hostname inside the guest
@@ -149,7 +149,7 @@
 - name: Create a backend-specific copy of the Java trust store
   ansible.builtin.copy:
     src: "{{ tms_java_home }}/lib/security/cacerts"
-    dest: /etc/ssl/certs/tms-backend-cacerts
+    dest: "{{ tms_backend_trust_store }}"
     remote_src: true
     force: false
     owner: root
@@ -162,7 +162,7 @@
       - "{{ tms_java_home }}/bin/keytool"
       - -list
       - -keystore
-      - /etc/ssl/certs/tms-backend-cacerts
+      - "{{ tms_backend_trust_store }}"
       - -storepass
       - changeit
       - -alias
@@ -178,19 +178,19 @@
       - -importcert
       - -noprompt
       - -keystore
-      - /etc/ssl/certs/tms-backend-cacerts
+      - "{{ tms_backend_trust_store }}"
       - -storepass
       - changeit
       - -alias
       - tms-installation-ca
       - -file
-      - /etc/tms/tls/ca.crt
+      - "{{ tms_tls_directory }}/ca.crt"
   when: frontend_proxy_trusted_ca.rc == 1
   changed_when: true
 
 - name: Keep the public backend trust store readable by service accounts
   ansible.builtin.file:
-    path: /etc/ssl/certs/tms-backend-cacerts
+    path: "{{ tms_backend_trust_store }}"
     owner: root
     group: root
     mode: '0644'
@@ -202,7 +202,7 @@
       - -exportcert
       - -rfc
       - -keystore
-      - /etc/ssl/certs/tms-backend-cacerts
+      - "{{ tms_backend_trust_store }}"
       - -storepass
       - changeit
       - -alias
@@ -262,7 +262,7 @@
 - name: Verify frontend HTTPS with hostname and CA validation
   ansible.builtin.uri:
     url: "{{ tms_public_origin }}/tms/"
-    ca_path: /etc/tms/tls/ca.crt
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
     validate_certs: true
     use_proxy: false
     return_content: true
@@ -282,7 +282,7 @@
 - name: Verify frontend routes and a missing asset
   ansible.builtin.uri:
     url: "{{ tms_public_origin }}{{ item.path }}"
-    ca_path: /etc/tms/tls/ca.crt
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
     validate_certs: true
     use_proxy: false
     status_code: "{{ item.status }}"
@@ -292,7 +292,7 @@
 
 - name: Write the HTTPS stage report
   ansible.builtin.copy:
-    dest: /etc/tms/https-report.json
+    dest: "{{ tms_database_state_directory }}/https-report.json"
     content: "{{ frontend_proxy_report | to_nice_json }}\n"
     owner: root
     group: root
@@ -303,13 +303,13 @@
       release: "{{ frontend_proxy_release }}"
       ca_sha256: "{{ tms_tls_ca_sha256 }}"
       certificate_expires: "{{ tms_tls_server_expires }}"
-      backend_trust_store: /etc/ssl/certs/tms-backend-cacerts
+      backend_trust_store: "{{ tms_backend_trust_store }}"
       https_frontend: passed with CA and hostname verification
       application_login: pending Keycloak and backend installation
 
 - name: Fetch the HTTPS report
   ansible.builtin.fetch:
-    src: /etc/tms/https-report.json
+    src: "{{ tms_database_state_directory }}/https-report.json"
     dest: "{{ playbook_dir }}/.local/reports/"
     flat: false
 

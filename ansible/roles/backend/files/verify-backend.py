@@ -62,10 +62,10 @@ def verify(origin, password, opener, websocket_check=None):
             'websocket_stomp_connect': 'passed' if websocket_check else 'not checked'}
 
 
-def websocket_check(origin, token):
+def websocket_check(origin, token, java_executable, trust_store):
     result = subprocess.run([
-        '/usr/lib/jvm/java-25-openjdk-arm64/bin/java',
-        '-Djavax.net.ssl.trustStore=/etc/ssl/certs/tms-backend-cacerts',
+        java_executable,
+        '-Djavax.net.ssl.trustStore=' + trust_store,
         '-Djavax.net.ssl.trustStorePassword=changeit',
         '/usr/local/lib/tms-ansible/WebSocketProbe.java', origin],
         input=token, text=True, capture_output=True, timeout=150)
@@ -76,8 +76,9 @@ def websocket_check(origin, token):
 def main():
     values = json.load(sys.stdin)
     opener = build_opener(ProxyHandler({}), HTTPSHandler(
-        context=ssl.create_default_context(cafile='/etc/tms/tls/ca.crt')))
-    print(json.dumps(verify(values['origin'], values['password'], opener, websocket_check)))
+        context=ssl.create_default_context(cafile=values['ca_file'])))
+    print(json.dumps(verify(values['origin'], values['password'], opener,
+        lambda origin, token: websocket_check(origin, token, values['java_executable'], values['trust_store']))))
 
 
 if __name__ == '__main__':

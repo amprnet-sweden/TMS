@@ -10,7 +10,7 @@
 - name: Copy the immutable development snapshot to the guest
   ansible.builtin.copy:
     src: "{{ tms_source_archive }}"
-    dest: "/var/cache/tms-build/{{ tms_source_sha256 }}.tar"
+    dest: "{{ tms_build_cache_directory }}/{{ tms_source_sha256 }}.tar"
     owner: root
     group: root
     mode: '0644'

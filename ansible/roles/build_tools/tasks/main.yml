@@ -1,16 +1,26 @@
 ---
 - name: Inspect the proposed managed build directory
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
   loop:
-    - "{{ tms_build_root }}"
-    - "{{ tms_build_root }}/.ansible-managed"
-  register: build_tools_directory_state
+    - name: root
+      path: "{{ tms_build_root }}"
+    - name: marker
+      path: "{{ tms_build_root }}/.ansible-managed"
+  loop_control:
+    label: "{{ item.name }}"
+  register: build_tools_directory_state_inspection
+
+- name: Index build tools directory state by name
+  ansible.builtin.set_fact:
+    build_tools_directory_state: >-
+      {{ dict(build_tools_directory_state_inspection.results | map(attribute='item.name') |
+              zip(build_tools_directory_state_inspection.results | map(attribute='stat'))) }}
 
 - name: Refuse to adopt an unmanaged build directory
   ansible.builtin.assert:
     that:
-      - not build_tools_directory_state.results[0].stat.exists or build_tools_directory_state.results[1].stat.exists
+      - not build_tools_directory_state.root.exists or build_tools_directory_state.marker.exists
     fail_msg: The build directory already exists without our management marker; inspect it before proceeding.
 
 - name: Check for an existing build account
@@ -22,13 +32,13 @@
 - name: Refuse to reuse an unrelated account
   ansible.builtin.assert:
     that:
-      - ansible_facts.getent_passwd[tms_build_user] is none or build_tools_directory_state.results[1].stat.exists
+      - ansible_facts.getent_passwd[tms_build_user] is none or build_tools_directory_state.marker.exists
     fail_msg: The proposed build account already exists outside this playbook's managed directory.
 
 - name: Install the single JDK and native build prerequisites
   ansible.builtin.apt:
     name:
-      - openjdk-25-jdk-headless
+      - "{{ tms_java_package }}"
       - ca-certificates
       - acl
       - xz-utils
@@ -89,13 +99,13 @@
     group: root
     mode: '0755'
   loop:
-    - /opt/tms-toolchains
-    - /var/cache/tms-build
+    - "{{ tms_toolchain_directory }}"
+    - "{{ tms_build_cache_directory }}"
 
 - name: Download the pinned Node ARM64 distribution and verify its checksum
   ansible.builtin.get_url:
     url: "https://nodejs.org/dist/v{{ tms_node_version }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
-    dest: "/var/cache/tms-build/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    dest: "{{ tms_build_cache_directory }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
     checksum: "sha256:{{ tms_node_sha256 }}"
     owner: root
     group: root
@@ -104,8 +114,8 @@
 
 - name: Extract the pinned Node distribution
   ansible.builtin.unarchive:
-    src: "/var/cache/tms-build/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
-    dest: /opt/tms-toolchains
+    src: "{{ tms_build_cache_directory }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    dest: "{{ tms_toolchain_directory }}"
     remote_src: true
     owner: root
     group: root
@@ -132,6 +142,6 @@
 - name: Require the selected Java and Node versions
   ansible.builtin.assert:
     that:
-      - build_tools_compiler_version.stdout is match('^javac 25[.]')
-      - build_tools_java_version.stderr is search('version "25[.]')
+      - build_tools_compiler_version.stdout is match('^javac ' ~ (tms_java_version | string) ~ '[.]')
+      - build_tools_java_version.stderr is search('version "' ~ (tms_java_version | string) ~ '[.]')
       - build_tools_node_version.stdout == 'v' ~ tms_node_version

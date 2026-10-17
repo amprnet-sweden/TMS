@@ -1,6 +1,6 @@
 ---
 tms_keycloak_version: 26.8.1
-tms_keycloak_sha256: aca60ab72ae4d67adc6b8fe7fca5e08d16a6bb5e4a4f2ebb54050e3f5503fd2b
+tms_keycloak_sha256: 4e2740b181faa2ea623a1c2ecf00855935311e546046e2f857615a47ed24cbe8
 tms_keycloak_home: "/opt/keycloak/keycloak-{{ tms_keycloak_version }}"
 tms_keycloak_http_relative_path: /auth
 tms_keycloak_build_arguments:

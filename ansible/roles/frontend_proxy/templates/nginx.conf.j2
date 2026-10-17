@@ -22,8 +22,8 @@ http {
         listen {{ tms_https_port }} ssl;
         listen [::]:{{ tms_https_port }} ssl;
         server_name {{ tms_hostname }};
-        ssl_certificate /etc/tms/tls/server.crt;
-        ssl_certificate_key /etc/tms/tls/server.key;
+        ssl_certificate {{ tms_tls_directory }}/server.crt;
+        ssl_certificate_key {{ tms_tls_directory }}/server.key;
         ssl_protocols TLSv1.2 TLSv1.3;
         root /srv/tms/current;
 

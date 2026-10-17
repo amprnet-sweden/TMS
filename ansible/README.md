@@ -120,3 +120,50 @@ Run the backend authentication regression tests separately with Java 25:
 `./gradlew test --tests se.amprnet.tms.messaging.WebSocketAuthenticatorServiceTests`
 from `backend/`. The installer pins its controller, Node and Keycloak versions;
 review and update those pins deliberately.
+
+Shared target paths are defined in `vars/common.yml`. The Java version is defined
+in `vars/build.yml`; source preparation checks that `backend/build.gradle`
+selects the same compiler. Update both declarations together when upgrading Java.
+
+## Planned improvements
+
+The following refactorings are listed in approximate priority order. Preserve
+existing ownership checks, credential preservation, checksum verification and
+repeat-run behavior throughout these changes.
+
+- [x] **Define the Java version once.** Introduce `tms_java_version` and derive
+  the package name, Java home, version assertions and task descriptions from it.
+  Pass the Java executable to backend verification and the expected version to
+  source preparation. Check that the independently declared Gradle toolchain
+  requirement agrees with the installer.
+- [x] **Use shared paths consistently across roles.** Move shared paths into
+  common variables and replace hardcoded copies of `tms_build_root`,
+  `tms_database_socket` and `tms_database_state_directory`, including paths in
+  artifact validation patterns.
+- [x] **Replace numbered inspection results with named results.** Replace
+  references such as `keycloak_paths.results[4]` with individually registered
+  results or dictionaries keyed by meaningful names, especially in ownership
+  and prerequisite checks.
+- [ ] **Split large roles into named phases.** Extract validation, installation,
+  configuration, verification and reporting task files from the backend,
+  Keycloak and frontend/proxy roles. Preserve task order and handler boundaries.
+- [ ] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
+  certificate installation and backend Java trust-store setup into a dedicated
+  role so service prerequisites are explicit.
+- [ ] **Extract common controller and vault utilities.** Share controller-path
+  resolution, vault access, validation and error handling between Python
+  helpers while retaining explicit credential-preservation rules. Separate
+  general deployment-variable generation from certificate preparation so
+  deployment settings no longer depend on `tls-vars.json`.
+- [ ] **Make the build report an explicit interface between stages.** Include
+  frontend/backend fingerprints and a report schema version, and validate
+  required fields when consuming the report. Stop deriving release identifiers
+  by splitting artifact directory paths.
+- [ ] **Run preflight once during a complete installation.** Extract reusable
+  stage plays so `site.yml` performs preflight once while standalone stage
+  entry points retain their checks.
+- [ ] **Support existing HTTPS certificates.** Allow operators to supply a
+  certificate chain and private key instead of generating a private CA and
+  server certificate. Validate the certificate and hostname, configure NGINX
+  and backend Java trust appropriately, and document certificate renewal and
+  reload responsibilities.

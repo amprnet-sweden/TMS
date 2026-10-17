@@ -29,10 +29,11 @@ class RealmTests(unittest.TestCase):
 
     def test_lookup_permissions_include_keycloak_composite_read_roles(self):
         identity.verify_lookup_roles([
-            {"name": name} for name in ("view-users", "query-users", "query-groups")])
+            {"name": name} for name in ("view-users", "query-users", "query-groups", "view-realm")])
 
     def test_lookup_permissions_reject_management_or_missing_roles(self):
-        for names in (("view-users", "query-users", "query-groups", "manage-users"),
+        for names in (("view-users", "query-users", "query-groups", "view-realm", "manage-users"),
+                      ("view-users", "query-users", "query-groups"),
                       ("query-users", "query-groups")):
             with self.subTest(names=names), self.assertRaisesRegex(RuntimeError, "unexpected realm permissions"):
                 identity.verify_lookup_roles([{"name": name} for name in names])
