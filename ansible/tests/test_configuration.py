@@ -1,7 +1,9 @@
 """Check real Ansible expressions for toolchains, paths and ownership guards."""
 import importlib.util
+import base64
 import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch, Mock
 
@@ -162,3 +164,30 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(argv[0], '/custom/java/bin/java')
         self.assertIn('-Djavax.net.ssl.trustStore=/custom/cacerts', argv)
         self.assertNotIn('test-token', argv)
+
+    def test_tls_rejects_unmanaged_nginx_and_ca_replacement(self):
+        tasks = self.tasks('tls')
+        ownership = next(t for t in tasks if t['name'] == 'Refuse to adopt an unmanaged NGINX installation')
+        for managed in (False, True):
+            for installed in (False, True):
+                with self.subTest(managed=managed, installed=installed):
+                    self.assertEqual(self.allowed(
+                        ownership, tls_marker={'stat': {'exists': managed}},
+                        ansible_facts={'packages': {'nginx': []} if installed else {}}),
+                        managed or not installed)
+
+        pin = next(t for t in tasks if t['name'] == 'Reject unintended CA replacement')
+        original = 'a' * 64
+        saved = {'content': base64.b64encode((original + '\n').encode()).decode()}
+        self.assertTrue(self.allowed(pin, tls_original_ca=saved, tms_tls_ca_sha256=original))
+        self.assertFalse(self.allowed(pin, tls_original_ca=saved, tms_tls_ca_sha256='b' * 64))
+
+    def test_tls_checks_the_existing_java_trust_anchor(self):
+        check = next(t for t in self.tasks('tls') if t['name'] == 'Require the expected CA in the backend trust store')
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, 'ca.crt').write_text('-----BEGIN CERTIFICATE-----\nexpected\n-----END CERTIFICATE-----\n')
+            values = dict(tms_tls_source_directory=directory)
+            self.assertTrue(self.allowed(check, **values, tls_exported_ca={
+                'stdout': '-----BEGIN CERTIFICATE-----\nexpected\n-----END CERTIFICATE-----'}))
+            self.assertFalse(self.allowed(check, **values, tls_exported_ca={
+                'stdout': '-----BEGIN CERTIFICATE-----\nother\n-----END CERTIFICATE-----'}))

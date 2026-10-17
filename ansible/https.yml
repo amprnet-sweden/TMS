@@ -19,4 +19,5 @@
           - tms_tls_ca_sha256 is match('^[a-f0-9]{64}$')
         fail_msg: Run install.sh to prepare certificates and deployment variables.
   roles:
+    - tls
     - frontend_proxy

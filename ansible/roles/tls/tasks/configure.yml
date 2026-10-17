@@ -61,9 +61,9 @@
       - changeit
       - -alias
       - tms-installation-ca
-  register: frontend_proxy_trusted_ca
+  register: tls_trusted_ca
   changed_when: false
-  failed_when: frontend_proxy_trusted_ca.rc not in [0, 1]
+  failed_when: tls_trusted_ca.rc not in [0, 1]
 
 - name: Import the installation CA into the backend trust store
   ansible.builtin.command:
@@ -79,7 +79,7 @@
       - tms-installation-ca
       - -file
       - "{{ tms_tls_directory }}/ca.crt"
-  when: frontend_proxy_trusted_ca.rc == 1
+  when: tls_trusted_ca.rc == 1
   changed_when: true
 
 - name: Keep the public backend trust store readable by service accounts
@@ -101,12 +101,12 @@
       - changeit
       - -alias
       - tms-installation-ca
-  register: frontend_proxy_exported_ca
+  register: tls_exported_ca
   changed_when: false
 
 - name: Require the expected CA in the backend trust store
   ansible.builtin.assert:
     that:
       - >-
-        (frontend_proxy_exported_ca.stdout | regex_replace('\\s', '')) ==
+        (tls_exported_ca.stdout | regex_replace('\\s', '')) ==
         (lookup('ansible.builtin.file', tms_tls_source_directory ~ '/ca.crt') | regex_replace('\\s', ''))

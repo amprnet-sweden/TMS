@@ -1,0 +1,32 @@
+---
+- name: Create the TLS directory
+  ansible.builtin.file:
+    path: "{{ tms_tls_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Keep the shared TMS state directory private
+  ansible.builtin.file:
+    path: "{{ tms_database_state_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Record HTTPS management and CA identity before provisioning
+  ansible.builtin.copy:
+    content: "{{ tms_tls_ca_sha256 }}\n"
+    dest: "{{ tms_database_state_directory }}/https-ca.sha256"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Install certificate utilities
+  ansible.builtin.apt:
+    name: openssl
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 86400

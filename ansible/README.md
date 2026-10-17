@@ -112,8 +112,12 @@ and are not part of the automated installer checks.
 ```bash
 "$TMS_CONTROLLER_DIR/venv/bin/python" -m unittest discover -s tests -v
 "$TMS_CONTROLLER_DIR/venv/bin/ansible-galaxy" collection install -r requirements.yml -p .local/collections
-ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
-  "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml site.yml --syntax-check
+for profile in standard pi_1gb_experimental; do
+  ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
+    "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
+      site.yml --syntax-check -e "tms_resource_profile=$profile" || exit
+done
+bash -n install.sh scripts/setup-controller.sh
 ```
 
 Run the backend authentication regression tests separately with Java 25:
@@ -124,8 +128,12 @@ review and update those pins deliberately.
 The backend, Keycloak and frontend/proxy roles use ordered static task imports
 from `tasks/main.yml`. Read these entry points to follow each role through its
 validation, installation, configuration, verification and reporting phases.
-Keycloak identity provisioning and frontend TLS/trust setup remain explicit
-phases within their respective roles.
+Keycloak identity provisioning remains an explicit phase. In `https.yml`, the
+`tls` role runs before `frontend_proxy`: it checks HTTPS ownership and the CA pin,
+installs certificates, maps the canonical hostname and prepares the backend Java
+trust store. Java must already be installed by the build stage. Certificate changes
+notify the proxy role's NGINX handlers, which run after proxy configuration and
+before HTTPS verification.
 
 Shared target paths are defined in `vars/common.yml`. The Java version is defined
 in `vars/build.yml`; source preparation checks that `backend/build.gradle`
@@ -133,7 +141,7 @@ selects the same compiler. Update both declarations together when upgrading Java
 
 ## Planned improvements
 
-The following refactorings are listed in approximate priority order. Preserve
+The following improvements are listed in approximate priority order. Preserve
 existing ownership checks, credential preservation, checksum verification and
 repeat-run behavior throughout these changes.
 
@@ -155,9 +163,12 @@ repeat-run behavior throughout these changes.
   Keycloak and frontend/proxy roles. Static imports preserve task order and
   handler boundaries; identity provisioning and HTTPS trust setup have their
   own phases within their existing roles.
-- [ ] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
+- [x] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
   certificate installation and backend Java trust-store setup into a dedicated
   role so service prerequisites are explicit.
+- [ ] **Run installer checks in CI.** Run the Python helper tests, playbook
+  syntax checks for both resource profiles and shell syntax checks on pull
+  requests, using the pinned controller dependencies.
 - [ ] **Extract common controller and vault utilities.** Share controller-path
   resolution, vault access, validation and error handling between Python
   helpers while retaining explicit credential-preservation rules. Separate
@@ -175,3 +186,13 @@ repeat-run behavior throughout these changes.
   server certificate. Validate the certificate and hostname, configure NGINX
   and backend Java trust appropriately, and document certificate renewal and
   reload responsibilities.
+- [ ] **Provide a reusable installation and convergence test runner.** Accept
+  inventory and deployment settings, run installation and an unchanged rerun,
+  compare service process/start/restart state and perform authenticated checks.
+  Preserve timestamped logs, exit codes and the exact tested source manifest.
+  Keep credentials and personal lab paths outside the repository; distinguish
+  fresh-install validation from checks against an existing managed host.
+- [ ] **Define Java trust-store refresh behavior.** Incorporate system CA
+  updates into the backend-specific trust store while preserving and verifying
+  the installation CA. Define when a backend restart is required and verify
+  that unchanged runs do not rebuild the store or restart services.

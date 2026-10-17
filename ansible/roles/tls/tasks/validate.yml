@@ -1,0 +1,28 @@
+---
+- name: Inspect existing NGINX ownership and CA pin
+  ansible.builtin.stat:
+    path: "{{ tms_database_state_directory }}/https-ca.sha256"
+  register: tls_marker
+
+- name: Read installed packages
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse to adopt an unmanaged NGINX installation
+  ansible.builtin.assert:
+    that:
+      - tls_marker.stat.exists or 'nginx' not in ansible_facts.packages
+    fail_msg: Existing NGINX must be migrated explicitly before this single-site playbook can manage it.
+
+- name: Read the original CA pin
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/https-ca.sha256"
+  register: tls_original_ca
+  when: tls_marker.stat.exists
+
+- name: Reject unintended CA replacement
+  ansible.builtin.assert:
+    that:
+      - tls_original_ca.content | b64decode | trim == tms_tls_ca_sha256
+    fail_msg: Restore the original controller TLS files; changing the CA requires an explicit migration.
+  when: tls_marker.stat.exists
