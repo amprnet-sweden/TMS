@@ -1,30 +1,30 @@
 name: Build Frontend and Backend
 
 on:
+  pull_request:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
 
+permissions:
+  contents: read
+
 jobs:
   frontend:
+    if: github.repository == 'amprnet-sweden/TMS'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./frontend
-    permissions:
-      contents: read
-      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/tms-vue-frontend
+
     steps:
       - uses: actions/checkout@v7
-      - name: Log in to the Container registry with write access
-        uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -34,33 +34,39 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-frontend
+          images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build and push Docker image
+      - name: Build and test
         uses: docker/build-push-action@v7
         with:
           file: ./frontend/Dockerfile
           context: ./frontend
           #platforms: linux/amd64
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
   backend:
+    if: github.repository == 'amprnet-sweden/TMS'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./backend
-    permissions:
-      contents: read
-      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/tms-spring-boot-backend
+
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Set release number
         run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
       - name: Print release number
@@ -73,32 +79,15 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      #- name: Log in to the Container registry with read access
-      #  uses: docker/login-action@v2
-      #  with:
-      #    registry: ${{ env.REGISTRY }}
-      #    username: ${{ github.actor }}
-      #    password: ${{ secrets.READ_PACKAGES }}
-
       - name: Build service
         run: ./gradlew build
-        #env:
-        #  USERNAME: ${{ github.actor }}
-        #  PASSWORD: ${{ secrets.READ_PACKAGES }}
       - name: Archive test report
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: test-report
           path: ./build/reports/tests/test/
-          retention-days: 2
-
-      - name: Log in to the Container registry with write access
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          retention-days: 3
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -110,11 +99,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-backend
+          images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build and push Docker image
+      - name: Build and test
         uses: docker/build-push-action@v7
         with:
           file: ./backend/Dockerfile
@@ -122,6 +112,7 @@ jobs:
           #platforms: linux/amd64
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           build-args: JAR=tms-backend-${{ env.RELEASE_VERSION }}.jar
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
