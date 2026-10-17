@@ -1,7 +1,7 @@
 # Native installation
 
 Installs TMS on a dedicated **Debian 13 ARM64** host:
-Java 25, Node 22, MariaDB 11.8, Keycloak 26.4.7, NGINX, frontend and backend.
+Java 25, Node 22, MariaDB 11.8, Keycloak 26.8.1, NGINX, frontend and backend.
 Application builds run under an unprivileged account; services use separate
 accounts. Databases and application listeners bind to loopback. NGINX provides
 HTTPS, including WebSocket forwarding.
