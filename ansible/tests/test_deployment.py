@@ -25,7 +25,9 @@ class DeploymentTests(unittest.TestCase):
         template = environment.from_string((ROOT / 'roles/frontend_proxy/templates/nginx.conf.j2').read_text())
         for origin, port in (('https://service.example.test', 443), ('https://other.example.test:9443', 9443)):
             values = self.configuration(origin)
+            values['tms_tls_directory'] = '/custom/tls'
             rendered = template.render(**values)
+            self.assertIn('ssl_certificate /custom/tls/server.crt;', rendered)
             self.assertIn(f'listen {port} ssl;', rendered)
             self.assertIn(f'server_name {urlsplit(origin).hostname};', rendered)
             self.assertIn(f'proxy_set_header Host {urlsplit(origin).netloc};', rendered)

@@ -62,7 +62,7 @@ class Identity:
         self.origin = values["origin"]
         self.base = self.origin + "/auth"
         self.opener = build_opener(ProxyHandler({}), HTTPSHandler(
-            context=ssl.create_default_context(cafile="/etc/tms/tls/ca.crt")))
+            context=ssl.create_default_context(cafile=values["ca_file"])))
         self.token = None
         self.changed = False
 

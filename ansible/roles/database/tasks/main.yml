@@ -1,12 +1,23 @@
 ---
 - name: Inspect database ownership markers and existing data
   ansible.builtin.stat:
-    path: "{{ item }}"
+    path: "{{ item.path }}"
   loop:
-    - "{{ tms_database_state_directory }}/database-owner.json"
-    - /var/lib/mysql
-    - "{{ tms_database_state_directory }}/database-ready"
-  register: database_existing
+    - name: owner
+      path: "{{ tms_database_state_directory }}/database-owner.json"
+    - name: data
+      path: /var/lib/mysql
+    - name: ready
+      path: "{{ tms_database_state_directory }}/database-ready"
+  loop_control:
+    label: "{{ item.name }}"
+  register: database_existing_inspection
+
+- name: Index database existing by name
+  ansible.builtin.set_fact:
+    database_existing: >-
+      {{ dict(database_existing_inspection.results | map(attribute='item.name') |
+              zip(database_existing_inspection.results | map(attribute='stat'))) }}
 
 - name: Read installed package names
   ansible.builtin.package_facts:
@@ -16,8 +27,8 @@
   ansible.builtin.assert:
     that:
       - >-
-        database_existing.results[0].stat.exists or
-        (not database_existing.results[1].stat.exists and
+        database_existing.owner.exists or
+        (not database_existing.data.exists and
          'mariadb-server' not in ansible_facts.packages and
          'mysql-server' not in ansible_facts.packages)
     fail_msg: A database installation already exists without a TMS ownership marker. Migration requires a separate procedure.
@@ -26,14 +37,14 @@
   ansible.builtin.slurp:
     src: "{{ tms_database_state_directory }}/database-owner.json"
   register: database_owner
-  when: database_existing.results[0].stat.exists
+  when: database_existing.owner.exists
 
 - name: Require the original vault for an existing deployment
   ansible.builtin.assert:
     that:
       - (database_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
     fail_msg: This vault belongs to a different deployment. Restore the original vault and its key; credentials will not be reset.
-  when: database_existing.results[0].stat.exists
+  when: database_existing.owner.exists
 
 - name: Create the root-owned deployment state directory
   ansible.builtin.file:
@@ -125,7 +136,7 @@
     config_file: ''
     name: test
     state: absent
-  when: not database_existing.results[2].stat.exists
+  when: not database_existing.ready.exists
 
 - name: Find root accounts other than local socket administration
   ansible.mariadb.mariadb_query:

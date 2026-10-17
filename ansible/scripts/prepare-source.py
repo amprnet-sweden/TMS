@@ -12,6 +12,8 @@ import re
 import subprocess
 import tarfile
 
+import yaml
+
 
 def git(root, *arguments):
     return subprocess.check_output(["git", "-C", str(root), *arguments])
@@ -26,14 +28,20 @@ def normalized_content(path):
     return content.replace(b"\r\n", b"\n") if b"\0" not in content else content
 
 
+def require_java_version(build, expected):
+    selected = re.search(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)", build)
+    if not selected or int(selected.group(1)) != expected:
+        raise SystemExit(f"The source must select the Java {expected} compiler before building.")
+
+
 def main():
     ansible = Path(__file__).resolve().parents[1]
     root = ansible.parent
     local = ansible / ".local"
     local.mkdir(exist_ok=True)
     build = (root / "backend/build.gradle").read_text()
-    if not re.search(r"JavaLanguageVersion\.of\(21\)", build):
-        raise SystemExit("The source must select the Java 21 compiler before building.")
+    java_version = yaml.safe_load((ansible / "vars/build.yml").read_text())["tms_java_version"]
+    require_java_version(build, java_version)
     package = json.loads((root / "frontend/package.json").read_text())
     lock_path = root / "frontend/package-lock.json"
     if not lock_path.exists():
@@ -72,7 +80,8 @@ def main():
     temporary.replace(destination)
 
     recipe = hashlib.sha256()
-    recipe_files = [ansible / "build.yml", ansible / "vars/resources.yml", Path(__file__).resolve()]
+    recipe_files = [ansible / "build.yml", ansible / "vars/resources.yml",
+                    ansible / "vars/build.yml", ansible / "vars/common.yml", Path(__file__).resolve()]
     recipe_files += [path for role in ("build", "build_tools")
                      for path in (ansible / "roles" / role).rglob("*")
                      if path.is_file() and path.suffix in (".yml", ".j2", ".py")]

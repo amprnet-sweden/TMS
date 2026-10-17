@@ -31,7 +31,7 @@
 
     - name: Extract the source snapshot
       ansible.builtin.unarchive:
-        src: "/var/cache/tms-build/{{ tms_source_sha256 }}.tar"
+        src: "{{ tms_build_cache_directory }}/{{ tms_source_sha256 }}.tar"
         dest: "{{ component_directory }}"
         remote_src: true
 

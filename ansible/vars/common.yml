@@ -1,0 +1,9 @@
+---
+# Paths shared by installation stages and their verification helpers.
+tms_build_root: /var/lib/tms-build
+tms_build_cache_directory: /var/cache/tms-build
+tms_toolchain_directory: /opt/tms-toolchains
+tms_database_socket: /run/mysqld/mysqld.sock
+tms_database_state_directory: /etc/tms
+tms_tls_directory: "{{ tms_database_state_directory }}/tls"
+tms_backend_trust_store: /etc/ssl/certs/tms-backend-cacerts

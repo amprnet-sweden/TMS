@@ -38,7 +38,9 @@ class ResourceTests(unittest.TestCase):
             resources = profiles[profile]
             self.assertEqual(resources['minimum_memory_mb'], minimum)
             values = dict(tms_resources=resources, tms_resource_profile=profile,
-                          tms_java_home='/java', tms_keycloak_home='/keycloak')
+                          tms_java_home='/java', tms_keycloak_home='/keycloak',
+                          tms_database_state_directory='/custom/state',
+                          tms_backend_trust_store='/custom/cacerts')
             for role, filename in (('backend', 'tms-backend.service.j2'), ('keycloak', 'tms-keycloak.service.j2')):
                 template = environment.from_string((ROOT / f'roles/{role}/templates/{filename}').read_text())
                 self.assertIn(f'-Xmx{maximum}m', template.render(**values))

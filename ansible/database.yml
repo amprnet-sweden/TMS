@@ -7,6 +7,7 @@
   become: true
   gather_facts: false
   vars_files:
+    - vars/common.yml
     - vars/database.yml
   pre_tasks:
     - name: Require protected credentials and a deployment identity
