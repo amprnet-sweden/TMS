@@ -17,16 +17,19 @@
 
 package se.amprnet.tms.model;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
 import io.github.thibaultmeyer.cuid.CUID;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ser.std.StdScalarSerializer;
 
-import java.io.IOException;
+public class CuidSerializer extends StdScalarSerializer<CUID> {
 
-public class CuidSerializer extends JsonSerializer<CUID> {
+    public CuidSerializer() {
+        super(CUID.class);
+    }
+
     @Override
-    public void serialize(CUID cuid, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
-        jsonGenerator.writeString(cuid.toString());
+    public void serialize(CUID value, JsonGenerator gen, SerializationContext ctx) {
+        gen.writeString(value.toString());
     }
 }

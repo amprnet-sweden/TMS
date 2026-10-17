@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.8'
+    id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -9,14 +9,13 @@ version = System.getenv('RELEASE_VERSION') ?: '3.0.0-SNAPSHOT'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
-// Compile with our single JDK 21 installation while retaining the existing
-// Java 17 bytecode/API baseline used by the separate ARM32 Docker image.
+
 tasks.withType(JavaCompile).configureEach {
-    options.release = 17
+    options.release = 17 // bytecode/API baseline.
 }
 
 repositories {
@@ -30,28 +29,28 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-quartz'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation 'org.springframework.security:spring-security-messaging'
-    implementation 'org.liquibase:liquibase-core'
-    implementation 'io.github.thibaultmeyer:cuid:2.0.3'
-    implementation 'org.keycloak:keycloak-admin-client:26.0.7'
+    implementation 'org.springframework.boot:spring-boot-starter-liquibase'
+    implementation 'io.github.thibaultmeyer:cuid:2.0.5'
+    implementation 'org.keycloak:keycloak-admin-client:26.0.12'
 
     runtimeOnly 'com.h2database:h2'
-    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.6'
-    runtimeOnly 'org.postgresql:postgresql:42.7.8'
-    runtimeOnly 'com.github.ben-manes.caffeine:caffeine:3.2.3'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+    runtimeOnly 'org.postgresql:postgresql:42.7.13'
+    runtimeOnly 'com.github.ben-manes.caffeine:caffeine:3.2.4'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:mariadb:1.21.3'
-    testImplementation 'org.testcontainers:postgresql:1.21.3'
-    testImplementation 'com.github.dasniko:testcontainers-keycloak:3.7.0'
+    //testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mariadb:1.21.4'
+    testImplementation 'org.testcontainers:postgresql:1.21.4'
+    testImplementation 'com.github.dasniko:testcontainers-keycloak:3.8.0'
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -83,20 +82,13 @@ bootBuildImage {
     imageName = "${dockerImageName}:${imageTag}"
 }
 
-task docker(dependsOn: build) {
+tasks.register("docker", Exec) {
+    dependsOn tasks.build
     def jarName = "${rootProject.name}-${version}.jar"
-    doLast {
-        exec {
-            commandLine 'docker', 'buildx', 'build', '--platform', 'linux/amd64', '--build-arg', "JAR=$jarName", '-t', "${dockerImageName}:${imageTag}", layout.projectDir
-            //commandLine 'docker', 'build', '--build-arg', "JAR=$jarName", '-t', "${dockerImageName}:${imageTag}", layout.projectDir
-        }
-    }
+    commandLine "docker", "buildx", "build", "--platform", "linux/amd64", "--build-arg", "JAR=$jarName", "-t", "${dockerImageName}:${imageTag}", layout.projectDirectory
 }
 
-task push(dependsOn: tasks.docker) {
-    doLast {
-        exec {
-            commandLine 'docker', 'push', "${dockerImageName}:${imageTag}"
-        }
-    }
+tasks.register("push", Exec) {
+    dependsOn tasks.docker
+    commandLine "docker", "push", "${dockerImageName}:${imageTag}"
 }

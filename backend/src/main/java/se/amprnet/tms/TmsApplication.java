@@ -19,8 +19,10 @@ package se.amprnet.tms;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@ConfigurationPropertiesScan("se.amprnet.tms")
 public class TmsApplication {
 
     public static void main(String[] args) {

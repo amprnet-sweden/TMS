@@ -124,7 +124,7 @@ const items = computed(() => routes.filter((item) => {
   return true
 }))
 
-store.$patch(null)
+store.$patch({ user: null })
 
 const router = useRouter()
 

@@ -7,4 +7,4 @@ docker run --rm -it --name openssl --network none -v $PWD:/certs \
     -addext "subjectAltName=DNS.1:host.docker.internal,IP:127.0.0.1" \
     -newkey rsa:2048 -keyout /certs/private.key -out /certs/public.crt
 
-chmod 644 /certs/private.key
+chmod 644 private.key

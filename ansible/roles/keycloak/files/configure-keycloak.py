@@ -48,7 +48,7 @@ def client_needs_update(current, desired):
 
 
 def verify_lookup_roles(roles):
-    # Keycloak 26.4.7 expands view-users into query-users and query-groups.
+    # Keycloak 26.8.1 expands view-users into query-users and query-groups.
     expected = {"query-users", "view-users", "query-groups"}
     actual = {role["name"] for role in roles}
     if actual != expected:

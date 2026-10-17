@@ -19,8 +19,6 @@ package se.amprnet.tms.incident;
 
 import io.github.thibaultmeyer.cuid.CUID;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -39,8 +37,6 @@ import static se.amprnet.tms.data.DataUtils.cuid;
 
 @Service
 public class IncidentService {
-
-    private static final Logger log = LoggerFactory.getLogger(IncidentService.class);
 
     private final TmsConfiguration configuration;
     private final IncidentRepository incidentRepository;
@@ -99,10 +95,12 @@ public class IncidentService {
     public IncidentDTO createIncident(TmsContext context, IncidentDTO incident, UserDTO user) {
         final Incident entity = mapIncident(context.mission(), incident, user);
         final IncidentDTO created = toDTO(context, incidentRepository.save(entity));
-        sendNotification(new Notification(configuration.getTenant(),
-                user.email(), created.assignedTo() != null ? created.assignedTo().email() : null,
-                NotificationDomain.INCIDENT, NotificationCategory.CREATED, NotificationSeverity.INFO,
-                "tms.incident.created.message", created.name(), created.id()));
+        if (configuration.getTenant() != null) {
+            sendNotification(new Notification(configuration.getTenant(),
+                    user.email(), created.assignedTo() != null ? created.assignedTo().email() : null,
+                    NotificationDomain.INCIDENT, NotificationCategory.CREATED, NotificationSeverity.INFO,
+                    "tms.incident.created.message", created.name(), created.id()));
+        }
         return created;
     }
 
@@ -125,10 +123,12 @@ public class IncidentService {
         }
         return getIncident(context, id, user)
                 .map(updated -> {
-                    sendNotification(new Notification(configuration.getTenant(),
-                            user.email(), updated.assignedTo() != null ? updated.assignedTo().email() : null,
-                            NotificationDomain.INCIDENT, NotificationCategory.UPDATED, NotificationSeverity.INFO,
-                            "tms.incident.updated.message", updated.name(), updated.id()));
+                    if (configuration.getTenant() != null) {
+                        sendNotification(new Notification(configuration.getTenant(),
+                                user.email(), updated.assignedTo() != null ? updated.assignedTo().email() : null,
+                                NotificationDomain.INCIDENT, NotificationCategory.UPDATED, NotificationSeverity.INFO,
+                                "tms.incident.updated.message", updated.name(), updated.id()));
+                    }
                     return updated;
                 });
     }
@@ -138,10 +138,12 @@ public class IncidentService {
         return getIncident(context, id, user)
                 .map(deleted -> {
                     incidentRepository.deleteById(id);
-                    sendNotification(new Notification(configuration.getTenant(),
-                            user.email(), deleted.assignedTo() != null ? deleted.assignedTo().email() : null,
-                            NotificationDomain.INCIDENT, NotificationCategory.DELETED, NotificationSeverity.INFO,
-                            "tms.incident.deleted.message", deleted.name(), deleted.id()));
+                    if (configuration.getTenant() != null) {
+                        sendNotification(new Notification(configuration.getTenant(),
+                                user.email(), deleted.assignedTo() != null ? deleted.assignedTo().email() : null,
+                                NotificationDomain.INCIDENT, NotificationCategory.DELETED, NotificationSeverity.INFO,
+                                "tms.incident.deleted.message", deleted.name(), deleted.id()));
+                    }
                     return deleted;
                 });
     }

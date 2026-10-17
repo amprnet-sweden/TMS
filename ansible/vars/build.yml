@@ -1,5 +1,5 @@
 ---
-tms_java_version: 21
+tms_java_version: 25
 tms_java_package: "openjdk-{{ tms_java_version }}-jdk-headless"
 tms_java_home: "/usr/lib/jvm/java-{{ tms_java_version }}-openjdk-arm64"
 tms_node_version: 22.23.3

@@ -36,22 +36,23 @@ import java.util.Optional;
 @Service
 public class KeycloakAdminService {
 
-    private final TmsConfiguration.KeycloakConfiguration configuration;
+    private final TmsConfiguration configuration;
     private Keycloak keycloak;
 
-    public KeycloakAdminService(TmsConfiguration.KeycloakConfiguration configuration) {
+    public KeycloakAdminService(TmsConfiguration configuration) {
         this.configuration = configuration;
     }
 
     @PostConstruct
     public void init() {
+        TmsConfiguration.KeycloakConfiguration cfg = configuration.getKeycloak();
         this.keycloak = KeycloakBuilder.builder()
-                .serverUrl(configuration.getUri())
+                .serverUrl(cfg.getUri())
                 .realm("master")
-                .clientId(configuration.getClientId())
+                .clientId(cfg.getClientId())
                 .grantType("password")
-                .username(configuration.getUsername())
-                .password(configuration.getPassword())
+                .username(cfg.getUsername())
+                .password(cfg.getPassword())
                 .build();
     }
 
@@ -62,17 +63,17 @@ public class KeycloakAdminService {
 
     @Cacheable("users")
     public List<UserDTO> getUsers() {
-        return keycloak.realm(configuration.getRealm()).users().list().stream().map(this::map).toList();
+        return keycloak.realm(configuration.getKeycloak().getRealm()).users().list().stream().map(this::map).toList();
     }
 
     @Cacheable("users")
     public List<UserDTO> findUsers(@NotBlank String username) {
-        return keycloak.realm(configuration.getRealm()).users().search(username).stream().map(this::map).toList();
+        return keycloak.realm(configuration.getKeycloak().getRealm()).users().search(username).stream().map(this::map).toList();
     }
 
     @Cacheable("users")
     public Optional<UserDTO> getUserByUsername(@NotBlank String username) {
-        final List<UserRepresentation> result = keycloak.realm(configuration.getRealm()).users().search(username, true);
+        final List<UserRepresentation> result = keycloak.realm(configuration.getKeycloak().getRealm()).users().search(username, true);
         if (result.isEmpty()) {
             return Optional.empty();
         }
@@ -81,7 +82,7 @@ public class KeycloakAdminService {
 
     @Cacheable("users")
     public Optional<UserDTO> getUser(@NotBlank String sub) {
-        final UserResource user = keycloak.realm(configuration.getRealm()).users().get(sub);
+        final UserResource user = keycloak.realm(configuration.getKeycloak().getRealm()).users().get(sub);
         if (user != null) {
             return Optional.of(map(user.toRepresentation()));
         }
@@ -90,12 +91,12 @@ public class KeycloakAdminService {
 
     @Cacheable("roles")
     public List<Role> getRoles() {
-        return keycloak.realm(configuration.getRealm()).roles().list().stream().map(kcRole -> new Role(kcRole.getId(), kcRole.getName(), kcRole.getDescription())).toList();
+        return keycloak.realm(configuration.getKeycloak().getRealm()).roles().list().stream().map(kcRole -> new Role(kcRole.getId(), kcRole.getName(), kcRole.getDescription())).toList();
     }
 
     @Cacheable("groups")
     public List<Group> getGroups() {
-        return keycloak.realm(configuration.getRealm()).groups().groups().stream().map(kcGroup -> new Group(kcGroup.getId(), kcGroup.getName())).toList();
+        return keycloak.realm(configuration.getKeycloak().getRealm()).groups().groups().stream().map(kcGroup -> new Group(kcGroup.getId(), kcGroup.getName())).toList();
     }
 
     private UserDTO map(UserRepresentation kcUser) {

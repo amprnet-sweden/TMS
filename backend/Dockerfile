@@ -1,6 +1,6 @@
 #FROM eclipse-temurin:21.0.9_10-jre-noble
-FROM --platform=linux/amd64 eclipse-temurin:21.0.9_10-jre-noble AS build-amd64
-FROM --platform=linux/arm64 eclipse-temurin:21.0.9_10-jre-noble AS build-arm64
+FROM --platform=linux/amd64 eclipse-temurin:25.0.2_10-jre-noble AS build-amd64
+FROM --platform=linux/arm64 eclipse-temurin:25.0.2_10-jre-noble AS build-arm64
 FROM --platform=linux/arm/v7 arm32v7/eclipse-temurin:17.0.13_11-jre-jammy AS build-arm
 FROM build-$TARGETARCH
 
