@@ -1,12 +1,9 @@
 ---
-- name: Validate frontend artifacts and HTTPS ownership
+- name: Validate frontend artifacts
   ansible.builtin.import_tasks: validate.yml
 
 - name: Install proxy prerequisites
   ansible.builtin.import_tasks: install.yml
-
-- name: Configure certificates and backend Java trust
-  ansible.builtin.import_tasks: tls.yml
 
 - name: Configure and activate the frontend proxy
   ansible.builtin.import_tasks: configure.yml

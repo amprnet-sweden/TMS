@@ -1,0 +1,9 @@
+---
+- name: Validate HTTPS ownership and the original CA pin
+  ansible.builtin.import_tasks: validate.yml
+
+- name: Install certificate prerequisites
+  ansible.builtin.import_tasks: install.yml
+
+- name: Configure certificates and backend Java trust
+  ansible.builtin.import_tasks: configure.yml
