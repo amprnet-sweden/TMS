@@ -4,9 +4,6 @@ server:
 spring:
   application:
     name: tms
-  data:
-    jdbc:
-      dialect: mysql
   datasource:
     url: jdbc:mariadb://127.0.0.1:3306/tms
     username: tms
@@ -26,13 +23,13 @@ spring:
         jwt:
           issuer-uri: {{ tms_public_origin }}/auth/realms/amprnet
           jwk-set-uri: {{ tms_public_origin }}/auth/realms/amprnet/protocol/openid-connect/certs
-keycloak:
-  uri: {{ tms_public_origin }}/auth
-  realm: amprnet
-  client-id: admin-cli
-  username: admin-cli
-  password: ${TMS_KEYCLOAK_LOOKUP_PASSWORD}
 tms:
+  keycloak:
+    uri: {{ tms_public_origin }}/auth
+    realm: amprnet
+    client-id: admin-cli
+    username: admin-cli
+    password: ${TMS_KEYCLOAK_LOOKUP_PASSWORD}
   allowed-origins:
     - {{ tms_public_origin }}
   demo: false

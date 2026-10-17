@@ -48,8 +48,9 @@ def client_needs_update(current, desired):
 
 
 def verify_lookup_roles(roles):
-    # Keycloak 26.8.1 expands view-users into query-users and query-groups.
-    expected = {"query-users", "view-users", "query-groups"}
+    # view-users includes query roles; Keycloak 26.8 also requires view-realm
+    # to list realm roles. These roles are scoped to amprnet, not master.
+    expected = {"query-users", "view-users", "query-groups", "view-realm"}
     actual = {role["name"] for role in roles}
     if actual != expected:
         raise RuntimeError("Backend lookup account has unexpected realm permissions: "
@@ -196,7 +197,8 @@ class Identity:
             raise RuntimeError("Expected master realm management client is missing")
         client = clients[0]["id"]
         self.grant("master/users/" + lookup + "/role-mappings/clients/" + client,
-                   [self.api("GET", "master/clients/" + client + "/roles/" + r) for r in ("query-users", "view-users")])
+                   [self.api("GET", "master/clients/" + client + "/roles/" + r)
+                    for r in ("query-users", "view-users", "view-realm")])
         effective = self.api("GET", "master/users/" + lookup + "/role-mappings/clients/" + client + "/composite")
         verify_lookup_roles(effective)
         lookup_token = self.login("master", "admin-cli", v["lookup_password"])
