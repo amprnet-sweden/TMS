@@ -29,8 +29,8 @@ tms:
   demo: true
   tenant: ${TENANT}
 
-keycloak:
-  uri: https://host.docker.internal:9003/auth
-  realm: amprnet
-  username: admin-cli
-  password: hemligt
+  keycloak:
+    uri: https://host.docker.internal:9003/auth
+    realm: amprnet
+    username: admin-cli
+    password: hemligt
