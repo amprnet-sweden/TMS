@@ -56,7 +56,7 @@ services:
 
   tms-backend:
     #build: ./backend
-    image: ghcr.io/amprnet-sweden/tms-backend:latest
+    image: ghcr.io/amprnet-sweden/tms-spring-boot-backend:latest
     command:
      - "-trustca"
      - "/opt/tms/app.jar"
@@ -77,8 +77,8 @@ services:
       - "host.docker.internal:host-gateway"
 
   tms-frontend:
-    build: ./frontend
-    #image: ghcr.io/amprnet-sweden/tms-frontend:latest
+    #build: ./frontend
+    image: ghcr.io/amprnet-sweden/tms-vue-frontend:latest
     ports:
       - "9003:9003"
     volumes:
