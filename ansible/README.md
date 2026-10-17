@@ -162,3 +162,8 @@ repeat-run behavior throughout these changes.
 - [ ] **Run preflight once during a complete installation.** Extract reusable
   stage plays so `site.yml` performs preflight once while standalone stage
   entry points retain their checks.
+- [ ] **Support existing HTTPS certificates.** Allow operators to supply a
+  certificate chain and private key instead of generating a private CA and
+  server certificate. Validate the certificate and hostname, configure NGINX
+  and backend Java trust appropriately, and document certificate renewal and
+  reload responsibilities.
