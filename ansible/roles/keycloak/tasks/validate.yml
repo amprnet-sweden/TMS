@@ -1,0 +1,83 @@
+---
+- name: Read the database deployment identity
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/database-owner.json"
+  register: keycloak_database_owner
+
+- name: Require the same vault as the database stage
+  ansible.builtin.assert:
+    that:
+      - (keycloak_database_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+
+- name: Inspect prerequisites and existing Keycloak paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - name: database_ready
+      path: "{{ tms_database_state_directory }}/database-ready"
+    - name: https_ca
+      path: "{{ tms_database_state_directory }}/https-ca.sha256"
+    - name: owner
+      path: "{{ tms_database_state_directory }}/keycloak-owner.json"
+    - name: installation
+      path: /opt/keycloak
+    - name: service
+      path: /etc/systemd/system/tms-keycloak.service
+    - name: ready
+      path: "{{ tms_database_state_directory }}/keycloak-ready"
+  loop_control:
+    label: "{{ item.name }}"
+  register: keycloak_paths_inspection
+
+- name: Index keycloak paths by name
+  ansible.builtin.set_fact:
+    keycloak_paths: >-
+      {{ dict(keycloak_paths_inspection.results | map(attribute='item.name') |
+              zip(keycloak_paths_inspection.results | map(attribute='stat'))) }}
+
+- name: Inspect the existing Keycloak account
+  ansible.builtin.getent:
+    database: passwd
+    key: keycloak
+    fail_key: false
+
+- name: Require completed prerequisites and refuse unmanaged Keycloak
+  ansible.builtin.assert:
+    that:
+      - keycloak_paths.database_ready.exists
+      - keycloak_paths.https_ca.exists
+      - >-
+        keycloak_paths.owner.exists or
+        (not keycloak_paths.installation.exists and not keycloak_paths.service.exists
+         and not ansible_facts.getent_passwd.keycloak)
+    fail_msg: Complete database and HTTPS stages first. Existing unmanaged Keycloak requires a separate migration.
+
+- name: Read the existing Keycloak ownership record
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/keycloak-owner.json"
+  register: keycloak_owner
+  when: keycloak_paths.owner.exists
+
+- name: Reject vault replacement and implicit Keycloak upgrades
+  ansible.builtin.assert:
+    that:
+      - (keycloak_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - (keycloak_owner.content | b64decode | from_json).version == tms_keycloak_version
+    fail_msg: Restore the original vault. Version upgrades require a separate backup and migration procedure.
+  when: keycloak_paths.owner.exists
+
+- name: Inspect the database before claiming a fresh installation
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    query: SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = 'keycloak'
+  register: keycloak_database_tables
+  when: not keycloak_paths.owner.exists
+
+- name: Require an empty database for the first installation
+  ansible.builtin.assert:
+    that:
+      - keycloak_database_tables.query_result[0][0].table_count | int == 0
+    fail_msg: Refusing to adopt an existing Keycloak database.
+  when: not keycloak_paths.owner.exists

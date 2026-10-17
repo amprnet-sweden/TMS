@@ -1,0 +1,31 @@
+---
+- name: Verify frontend HTTPS with hostname and CA validation
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/tms/"
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
+    validate_certs: true
+    use_proxy: false
+    return_content: true
+    status_code: 200
+  register: frontend_proxy_https
+  retries: 10
+  delay: 3
+  until: frontend_proxy_https is succeeded
+
+- name: Require the expected frontend HTML
+  ansible.builtin.assert:
+    that:
+      - >-
+        frontend_proxy_https.content | hash('sha256') ==
+        frontend_proxy_build.frontend_files[frontend_proxy_build.frontend_directory ~ '/index.html']
+
+- name: Verify frontend routes and a missing asset
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}{{ item.path }}"
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
+    validate_certs: true
+    use_proxy: false
+    status_code: "{{ item.status }}"
+  loop:
+    - {path: /tms/missions, status: 200}
+    - {path: /tms/assets/tms-nonexistent-test.js, status: 404}

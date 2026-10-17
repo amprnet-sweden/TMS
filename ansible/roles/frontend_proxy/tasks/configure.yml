@@ -1,0 +1,42 @@
+---
+- name: Derive the immutable frontend release directory
+  ansible.builtin.set_fact:
+    frontend_proxy_release: "/srv/tms/releases/{{ frontend_proxy_build.frontend_directory.split('/')[-3] }}"
+
+- name: Copy frontend assets into a root-owned release
+  ansible.builtin.copy:
+    src: "{{ frontend_proxy_build.frontend_directory }}/"
+    dest: "{{ frontend_proxy_release }}/tms/"
+    remote_src: true
+    owner: root
+    group: root
+    mode: preserve
+    directory_mode: '0755'
+
+- name: Validate and install the complete single-site NGINX configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: /usr/sbin/nginx -t -c %s
+  notify: Reload TMS NGINX
+
+- name: Activate the validated frontend release
+  ansible.builtin.file:
+    src: "{{ frontend_proxy_release }}"
+    dest: /srv/tms/current
+    state: link
+    owner: root
+    group: root
+  notify: Reload TMS NGINX
+
+- name: Enable and start NGINX
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Apply pending NGINX changes before HTTPS checks
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,100 @@
+---
+- name: Record ownership before provisioning to allow interrupted runs to resume
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/keycloak-owner.json"
+    content: "{{ {'deployment_id': tms_database_deployment_id, 'version': tms_keycloak_version} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Create the Keycloak group
+  ansible.builtin.group:
+    name: keycloak
+    system: true
+
+- name: Create the unprivileged Keycloak account
+  ansible.builtin.user:
+    name: keycloak
+    group: keycloak
+    system: true
+    home: "{{ tms_keycloak_home }}/data"
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create root-owned installation and helper directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/keycloak
+    - /usr/local/lib/tms-ansible
+
+- name: Download the pinned Keycloak distribution and verify its checksum
+  ansible.builtin.get_url:
+    url: "https://github.com/keycloak/keycloak/releases/download/{{ tms_keycloak_version }}/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    dest: "{{ tms_build_cache_directory }}/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    checksum: "sha256:{{ tms_keycloak_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+    timeout: 120
+
+- name: Extract the root-owned Keycloak distribution
+  ansible.builtin.unarchive:
+    src: "{{ tms_build_cache_directory }}/keycloak-{{ tms_keycloak_version }}.tar.gz"
+    dest: /opt/keycloak
+    remote_src: true
+    owner: root
+    group: root
+    creates: "{{ tms_keycloak_home }}/bin/kc.sh"
+
+- name: Derive the completion marker from the runtime build inputs
+  ansible.builtin.set_fact:
+    keycloak_build_marker: >-
+      {{ tms_keycloak_home }}/.tms-build-{{
+      ([tms_keycloak_sha256, tms_java_home, tms_resources.keycloak_build_environment] + tms_keycloak_build_arguments) | to_json | hash('sha256') }}
+
+- name: Inspect completion of the required runtime build
+  ansible.builtin.stat:
+    path: "{{ keycloak_build_marker }}"
+  register: keycloak_build_completion
+
+- name: Stop the existing service before rebuilding its runtime
+  ansible.builtin.systemd_service:
+    name: tms-keycloak
+    state: stopped
+  when:
+    - not keycloak_build_completion.stat.exists
+    - keycloak_paths.service.exists
+
+- name: "Build the optimized MariaDB runtime with Java {{ tms_java_version }}"
+  ansible.builtin.command:
+    argv: "{{ [tms_keycloak_home + '/bin/kc.sh'] + tms_keycloak_build_arguments }}"
+    creates: "{{ keycloak_build_marker }}"
+  environment: "{{ {'JAVA_HOME': tms_java_home} | combine(tms_resources.keycloak_build_environment) }}"
+  async: 1800
+  poll: 15
+  register: keycloak_build
+  notify: Restart Keycloak
+
+- name: Record successful runtime optimization
+  ansible.builtin.copy:
+    dest: "{{ keycloak_build_marker }}"
+    content: "{{ tms_keycloak_build_arguments | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create writable data and gzip cache directories
+  ansible.builtin.file:
+    path: "{{ tms_keycloak_home }}/{{ item }}"
+    state: directory
+    owner: keycloak
+    group: keycloak
+    mode: '0750'
+  loop:
+    - data
+    - data/tmp

@@ -1,0 +1,56 @@
+---
+- name: Wait for backend health through verified HTTPS
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/api/actuator/health"
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
+    validate_certs: true
+    use_proxy: false
+    timeout: 30
+  register: backend_health
+  until: backend_health.status == 200 and (backend_health.json.status | default('')) == 'UP'
+  retries: 120
+  delay: 10
+
+- name: Verify that Liquibase applied application migrations
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    query: SELECT COUNT(*) AS applied_changes FROM tms.DATABASECHANGELOG
+  register: backend_migrations
+
+- name: Require applied migrations
+  ansible.builtin.assert:
+    that:
+      - backend_migrations.query_result[0][0].applied_changes | int > 0
+
+- name: Install the read-only API verification helper
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/lib/tms-ansible/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - verify-backend.py
+    - WebSocketProbe.java
+
+- name: Verify JWT authentication database reads and backend HTTPS identity lookups
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/lib/tms-ansible/verify-backend.py
+    stdin: >-
+      {{ {'origin': tms_public_origin, 'password': tms_keycloak_operator_password,
+          'java_executable': tms_java_home ~ '/bin/java', 'trust_store': tms_backend_trust_store,
+          'ca_file': tms_tls_directory ~ '/ca.crt'} | to_json }}
+  register: backend_verification
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Require successful authenticated application checks
+  ansible.builtin.assert:
+    that:
+      - backend_verification.rc == 0
+    fail_msg: "{{ backend_verification.stderr | default('Backend API verification failed.') }}"

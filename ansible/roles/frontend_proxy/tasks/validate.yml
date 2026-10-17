@@ -1,0 +1,70 @@
+---
+- name: Read the successful build report
+  ansible.builtin.slurp:
+    src: "{{ tms_build_root }}/build-report.json"
+  register: frontend_proxy_report_file
+
+- name: Decode the build report
+  ansible.builtin.set_fact:
+    frontend_proxy_build: "{{ frontend_proxy_report_file.content | b64decode | from_json }}"
+
+- name: Require matching build URLs and a managed artifact path
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_build.public_origin == tms_public_origin
+      - frontend_proxy_build.frontend_directory is match('^' ~ (tms_build_root | regex_escape) ~ '/frontend/[a-f0-9]{64}/frontend/dist$')
+      - frontend_proxy_build.frontend_files | length > 0
+
+- name: Verify all source frontend checksums
+  ansible.builtin.find:
+    paths: "{{ frontend_proxy_build.frontend_directory }}"
+    recurse: true
+    hidden: true
+    file_type: file
+    get_checksum: true
+    checksum_algorithm: sha256
+  register: frontend_proxy_files
+
+- name: Check for symlinks in the source frontend
+  ansible.builtin.find:
+    paths: "{{ frontend_proxy_build.frontend_directory }}"
+    recurse: true
+    hidden: true
+    file_type: link
+  register: frontend_proxy_links
+
+- name: Require an intact frontend artifact before deployment
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_links.matched == 0
+      - >-
+        (frontend_proxy_files.files | items2dict(key_name='path', value_name='checksum'))
+        == frontend_proxy_build.frontend_files
+
+- name: Inspect existing NGINX ownership and CA pin
+  ansible.builtin.stat:
+    path: "{{ tms_database_state_directory }}/https-ca.sha256"
+  register: frontend_proxy_marker
+
+- name: Read installed packages
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse to adopt an unmanaged NGINX installation
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_marker.stat.exists or 'nginx' not in ansible_facts.packages
+    fail_msg: Existing NGINX must be migrated explicitly before this single-site playbook can manage it.
+
+- name: Read the original CA pin
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/https-ca.sha256"
+  register: frontend_proxy_original_ca
+  when: frontend_proxy_marker.stat.exists
+
+- name: Reject unintended CA replacement
+  ansible.builtin.assert:
+    that:
+      - frontend_proxy_original_ca.content | b64decode | trim == tms_tls_ca_sha256
+    fail_msg: Restore the original controller TLS files; changing the CA requires an explicit migration.
+  when: frontend_proxy_marker.stat.exists

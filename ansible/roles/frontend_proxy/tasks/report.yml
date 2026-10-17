@@ -1,0 +1,30 @@
+---
+- name: Write the HTTPS stage report
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/https-report.json"
+    content: "{{ frontend_proxy_report | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0640'
+  vars:
+    frontend_proxy_report:
+      origin: "{{ tms_public_origin }}"
+      release: "{{ frontend_proxy_release }}"
+      ca_sha256: "{{ tms_tls_ca_sha256 }}"
+      certificate_expires: "{{ tms_tls_server_expires }}"
+      backend_trust_store: "{{ tms_backend_trust_store }}"
+      https_frontend: passed with CA and hostname verification
+      application_login: pending Keycloak and backend installation
+
+- name: Fetch the HTTPS report
+  ansible.builtin.fetch:
+    src: "{{ tms_database_state_directory }}/https-report.json"
+    dest: "{{ playbook_dir }}/.local/reports/"
+    flat: false
+
+- name: Report HTTPS readiness
+  ansible.builtin.debug:
+    msg:
+      - "Frontend assets are served at {{ tms_public_origin }}/tms/."
+      - TLS verification and frontend routing checks passed.
+      - Login remains unavailable until Keycloak and the backend are installed.

@@ -1,0 +1,32 @@
+---
+- name: Mark successful identity provisioning
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/keycloak-ready"
+    content: "{{ tms_database_deployment_id }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Write a credential-free identity report
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/keycloak-report.json"
+    content: >-
+      {{ {'version': tms_keycloak_version, 'issuer': keycloak_discovery.json.issuer,
+          'checks': (keycloak_identity.stdout | from_json | dict2items | rejectattr('key', 'equalto', 'changed') | items2dict),
+          'backend': 'not installed; browser TMS acceptance pending'} | to_nice_json }}
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Fetch the identity report
+  ansible.builtin.fetch:
+    src: "{{ tms_database_state_directory }}/keycloak-report.json"
+    dest: "{{ playbook_dir }}/.local/reports/"
+
+- name: Report identity readiness
+  ansible.builtin.debug:
+    msg:
+      - "Keycloak {{ tms_keycloak_version }}: {{ tms_public_origin }}/auth/admin/master/console/"
+      - Permanent administrator tms-admin and TMS user appuser verified; bootstrap administrator removed.
+      - Backend lookup account verified; JavaScript and CSS requests with gzip passed.
+      - Backend readiness is verified by the backend playbook.

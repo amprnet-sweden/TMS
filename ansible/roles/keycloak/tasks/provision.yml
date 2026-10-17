@@ -1,0 +1,65 @@
+---
+- name: Wait for Keycloak through verified HTTPS
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/auth/realms/master/.well-known/openid-configuration"
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
+    validate_certs: true
+    use_proxy: false
+    timeout: 30
+  register: keycloak_startup
+  until: keycloak_startup.status == 200
+  retries: 120
+  delay: 10
+
+- name: Require the correct public path before identity provisioning
+  ansible.builtin.assert:
+    that:
+      - keycloak_startup.json.issuer == tms_public_origin + tms_keycloak_http_relative_path + '/realms/master'
+      - >-
+        keycloak_startup.json.authorization_endpoint ==
+        tms_public_origin + tms_keycloak_http_relative_path + '/realms/master/protocol/openid-connect/auth'
+    fail_msg: Keycloak must advertise the canonical HTTPS origin including its /auth path.
+
+- name: Install the identity reconciliation helper and source realm
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/lib/tms-ansible/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - src: configure-keycloak.py
+      dest: configure-keycloak.py
+    - src: "{{ playbook_dir }}/../docker/keycloak/amprnet-realm.json"
+      dest: amprnet-realm.json
+
+- name: Reconcile identities and verify account permissions and compressed admin assets
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - /usr/local/lib/tms-ansible/configure-keycloak.py
+      - /usr/local/lib/tms-ansible/amprnet-realm.json
+    stdin: >-
+      {{ {'origin': tms_public_origin, 'ca_file': tms_tls_directory ~ '/ca.crt', 'deployment_id': tms_database_deployment_id,
+          'bootstrap_user': tms_keycloak_bootstrap_user, 'bootstrap_password': tms_keycloak_bootstrap_password,
+          'admin_password': tms_keycloak_admin_password, 'lookup_password': tms_keycloak_lookup_password,
+          'operator_password': tms_keycloak_operator_password} | to_json }}
+  register: keycloak_identity
+  changed_when: keycloak_identity.rc == 0 and (keycloak_identity.stdout | from_json).changed
+  failed_when: false
+  no_log: true
+
+- name: Require successful identity reconciliation
+  ansible.builtin.assert:
+    that:
+      - keycloak_identity.rc == 0
+    fail_msg: "{{ keycloak_identity.stderr | default('Identity reconciliation failed; inspect the Keycloak service journal.') }}"
+
+- name: Remove the temporary bootstrap environment
+  ansible.builtin.file:
+    path: "{{ tms_database_state_directory }}/keycloak-bootstrap.env"
+    state: absent
+  notify: Restart Keycloak
+
+- name: Remove bootstrap credentials from the running service environment
+  ansible.builtin.meta: flush_handlers

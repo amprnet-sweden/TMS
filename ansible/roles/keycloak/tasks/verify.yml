@@ -1,0 +1,19 @@
+---
+- name: Verify the application realm after bootstrap cleanup
+  ansible.builtin.uri:
+    url: "{{ tms_public_origin }}/auth/realms/amprnet/.well-known/openid-configuration"
+    ca_path: "{{ tms_tls_directory }}/ca.crt"
+    validate_certs: true
+    use_proxy: false
+    return_content: true
+    timeout: 30
+  register: keycloak_discovery
+  until: keycloak_discovery.status == 200
+  retries: 120
+  delay: 10
+
+- name: Require the canonical HTTPS issuer and token endpoint
+  ansible.builtin.assert:
+    that:
+      - keycloak_discovery.json.issuer == tms_public_origin + '/auth/realms/amprnet'
+      - keycloak_discovery.json.token_endpoint == tms_public_origin + '/auth/realms/amprnet/protocol/openid-connect/token'

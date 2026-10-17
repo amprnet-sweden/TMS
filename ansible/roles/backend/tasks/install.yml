@@ -1,0 +1,71 @@
+---
+- name: Record ownership before provisioning so interrupted runs can resume
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/backend-owner.json"
+    content: "{{ {'deployment_id': tms_database_deployment_id, 'backend_sha256': backend_build.backend_sha256} | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Create the backend service group
+  ansible.builtin.group:
+    name: tms-backend
+    system: true
+
+- name: Create the unprivileged backend service account
+  ansible.builtin.user:
+    name: tms-backend
+    group: tms-backend
+    system: true
+    home: /var/lib/tms-backend
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create root-owned release directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /opt/tms-backend
+    - /opt/tms-backend/releases
+    - "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}"
+
+- name: Create the private service configuration directory
+  ansible.builtin.file:
+    path: /etc/tms-backend
+    state: directory
+    owner: root
+    group: tms-backend
+    mode: '0750'
+
+- name: Create the writable service working directory
+  ansible.builtin.file:
+    path: /var/lib/tms-backend
+    state: directory
+    owner: tms-backend
+    group: tms-backend
+    mode: '0750'
+
+- name: Install the verified JAR as a root-owned release
+  ansible.builtin.copy:
+    src: "{{ backend_build.backend_jar }}"
+    dest: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}/app.jar"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart TMS backend
+
+- name: Verify the deployed JAR checksum
+  ansible.builtin.stat:
+    path: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}/app.jar"
+    checksum_algorithm: sha256
+  register: backend_installed
+
+- name: Require the installed release to match the build report
+  ansible.builtin.assert:
+    that:
+      - backend_installed.stat.checksum == backend_build.backend_sha256

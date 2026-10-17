@@ -1,0 +1,112 @@
+---
+- name: Install the public certificates
+  ansible.builtin.copy:
+    src: "{{ tms_tls_source_directory }}/{{ item }}"
+    dest: "{{ tms_tls_directory }}/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [ca.crt, server.crt]
+  notify: Reload TMS NGINX
+
+- name: Install only the server private key
+  ansible.builtin.copy:
+    src: "{{ tms_tls_source_directory }}/server.key"
+    dest: "{{ tms_tls_directory }}/server.key"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Reload TMS NGINX
+
+- name: Verify the certificate chain and hostname on the guest
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/openssl
+      - verify
+      - -CAfile
+      - "{{ tms_tls_directory }}/ca.crt"
+      - -purpose
+      - sslserver
+      - -verify_hostname
+      - "{{ tms_hostname }}"
+      - "{{ tms_tls_directory }}/server.crt"
+  changed_when: false
+
+- name: Map the canonical installation hostname inside the guest
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: '# {mark} TMS Ansible installation hostname'
+    block: '127.0.0.1 {{ tms_hostname }}'
+
+- name: Create a backend-specific copy of the Java trust store
+  ansible.builtin.copy:
+    src: "{{ tms_java_home }}/lib/security/cacerts"
+    dest: "{{ tms_backend_trust_store }}"
+    remote_src: true
+    force: false
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Check whether the installation CA is already trusted by the backend store
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -list
+      - -keystore
+      - "{{ tms_backend_trust_store }}"
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+  register: frontend_proxy_trusted_ca
+  changed_when: false
+  failed_when: frontend_proxy_trusted_ca.rc not in [0, 1]
+
+- name: Import the installation CA into the backend trust store
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -importcert
+      - -noprompt
+      - -keystore
+      - "{{ tms_backend_trust_store }}"
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+      - -file
+      - "{{ tms_tls_directory }}/ca.crt"
+  when: frontend_proxy_trusted_ca.rc == 1
+  changed_when: true
+
+- name: Keep the public backend trust store readable by service accounts
+  ansible.builtin.file:
+    path: "{{ tms_backend_trust_store }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Export the backend store's installation CA for verification
+  ansible.builtin.command:
+    argv:
+      - "{{ tms_java_home }}/bin/keytool"
+      - -exportcert
+      - -rfc
+      - -keystore
+      - "{{ tms_backend_trust_store }}"
+      - -storepass
+      - changeit
+      - -alias
+      - tms-installation-ca
+  register: frontend_proxy_exported_ca
+  changed_when: false
+
+- name: Require the expected CA in the backend trust store
+  ansible.builtin.assert:
+    that:
+      - >-
+        (frontend_proxy_exported_ca.stdout | regex_replace('\\s', '')) ==
+        (lookup('ansible.builtin.file', tms_tls_source_directory ~ '/ca.crt') | regex_replace('\\s', ''))

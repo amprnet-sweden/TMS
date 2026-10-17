@@ -1,0 +1,26 @@
+---
+- name: Write the backend report without credentials or application records
+  ansible.builtin.copy:
+    dest: "{{ tms_database_state_directory }}/backend-report.json"
+    content: >-
+      {{ {'backend_sha256': backend_build.backend_sha256, 'public_origin': tms_public_origin,
+          'source_sha256': backend_build.source_sha256, 'java_home': tms_java_home,
+          'applied_changes': backend_migrations.query_result[0][0].applied_changes,
+          'checks': backend_verification.stdout | from_json,
+          'packaging_tests': backend_build.backend_tests} | to_nice_json }}
+    owner: root
+    group: root
+    mode: '0640'
+
+- name: Fetch the backend verification report
+  ansible.builtin.fetch:
+    src: "{{ tms_database_state_directory }}/backend-report.json"
+    dest: "{{ playbook_dir }}/.local/reports/"
+
+- name: Report backend readiness
+  ansible.builtin.debug:
+    msg:
+      - "TMS is ready for browser testing at {{ tms_public_origin }}/tms/ as appuser."
+      - JWT and cookie authentication, database reads, and Java HTTPS Keycloak lookups passed.
+      - Run this stage again to verify zero changes before browser acceptance testing.
+      - Verify browser writes, live updates, reboot and recovery for this deployment.
