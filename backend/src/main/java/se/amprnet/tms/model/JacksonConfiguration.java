@@ -17,16 +17,18 @@
 
 package se.amprnet.tms.model;
 
-import com.fasterxml.jackson.databind.module.SimpleModule;
 import io.github.thibaultmeyer.cuid.CUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.JacksonModule;
+import tools.jackson.databind.module.SimpleModule;
 
 @Configuration
 public class JacksonConfiguration {
+
     @Bean
-    public com.fasterxml.jackson.databind.Module cuidModule() {
-        SimpleModule module = new SimpleModule();
+    public JacksonModule cuidModule() {
+        SimpleModule module = new SimpleModule("cuid-module");
         module.addSerializer(CUID.class, new CuidSerializer());
         module.addDeserializer(CUID.class, new CuidDeserializer());
         return module;

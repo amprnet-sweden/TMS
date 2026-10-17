@@ -17,22 +17,27 @@
 
 package se.amprnet.tms;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Configuration
+@Validated
 @ConfigurationProperties("tms")
 public class TmsConfiguration {
 
-    @NotBlank
     private String tenant;
     private boolean demo = false;
     private List<String> allowedOrigins = new ArrayList<>();
-    private KeycloakConfiguration keycloak;
+    @Valid
+    private final KeycloakConfiguration keycloak = new KeycloakConfiguration();
+    @Valid
+    private final FrontendConfiguration frontend = new FrontendConfiguration();
 
     public String getTenant() {
         return tenant;
@@ -62,17 +67,20 @@ public class TmsConfiguration {
         return keycloak;
     }
 
-    public void setKeycloak(KeycloakConfiguration keycloak) {
-        this.keycloak = keycloak;
+    public FrontendConfiguration getFrontend() {
+        return frontend;
     }
 
-    @Configuration
-    @ConfigurationProperties("keycloak")
     public static class KeycloakConfiguration {
-        private String uri = "https://tms.amprnet.se/auth";
+        @NotBlank
+        private String uri = "https://host.docker.internal:9003/auth";
+        @NotBlank
         private String realm = "amprnet";
+        @NotBlank
         private String clientId = "admin-cli";
-        private String username = "tms-kc-admin@ab.amprnet.se";
+        @NotBlank
+        private String username = "tms";
+        @NotBlank
         private String password = "secret";
 
         public String getUri() {
@@ -113,6 +121,63 @@ public class TmsConfiguration {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+    }
+
+    public static class FrontendConfiguration {
+
+        @Valid
+        private final MapConfiguration map = new MapConfiguration();
+
+        public MapConfiguration getMap() {
+            return map;
+        }
+
+        public static class MapConfiguration {
+            @NotBlank
+            private String tiles = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+            @Min(1)
+            @Max(20)
+            private int zoom = 12;
+            @Min(1)
+            @Max(25)
+            private int maxZoom = 19;
+            private LatLng center = new LatLng(59.328893326719275, 18.16224786713087);
+
+            public String getTiles() {
+                return tiles;
+            }
+
+            public void setTiles(String tiles) {
+                this.tiles = tiles;
+            }
+
+            public int getZoom() {
+                return zoom;
+            }
+
+            public void setZoom(int zoom) {
+                this.zoom = zoom;
+            }
+
+            public int getMaxZoom() {
+                return maxZoom;
+            }
+
+            public void setMaxZoom(int maxZoom) {
+                this.maxZoom = maxZoom;
+            }
+
+            public LatLng getCenter() {
+                return center;
+            }
+
+            public void setCenter(LatLng center) {
+                this.center = center;
+            }
+
+            public record LatLng(double lat, double lng) {
+            }
         }
     }
 }

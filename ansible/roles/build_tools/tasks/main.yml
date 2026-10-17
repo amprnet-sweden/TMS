@@ -28,7 +28,7 @@
 - name: Install the single JDK and native build prerequisites
   ansible.builtin.apt:
     name:
-      - openjdk-21-jdk-headless
+      - openjdk-25-jdk-headless
       - ca-certificates
       - acl
       - xz-utils
@@ -132,6 +132,6 @@
 - name: Require the selected Java and Node versions
   ansible.builtin.assert:
     that:
-      - build_tools_compiler_version.stdout is match('^javac 21[.]')
-      - build_tools_java_version.stderr is search('version "21[.]')
+      - build_tools_compiler_version.stdout is match('^javac 25[.]')
+      - build_tools_java_version.stderr is search('version "25[.]')
       - build_tools_node_version.stdout == 'v' ~ tms_node_version

@@ -1,5 +1,5 @@
 ---
-- name: Build the backend with the single Java 21 installation (tests explicitly skipped)
+- name: Build the backend with the single Java 25 installation (tests explicitly skipped)
   ansible.builtin.command:
     argv:
       - /bin/bash

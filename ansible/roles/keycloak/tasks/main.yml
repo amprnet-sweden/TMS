@@ -139,7 +139,7 @@
     - not keycloak_build_completion.stat.exists
     - keycloak_paths.results[4].stat.exists
 
-- name: Build the optimized MariaDB runtime with Java 21
+- name: Build the optimized MariaDB runtime with Java 25
   ansible.builtin.command:
     argv: "{{ [tms_keycloak_home + '/bin/kc.sh'] + tms_keycloak_build_arguments }}"
     creates: "{{ keycloak_build_marker }}"
