@@ -43,7 +43,17 @@ class ConfigurationTests(unittest.TestCase):
             self.values.update(trusted(self.loader.load_from_file(str(ROOT / f'vars/{filename}.yml'))))
 
     def tasks(self, role):
-        return trusted(self.loader.load_from_file(str(ROOT / f'roles/{role}/tasks/main.yml')))
+        def load(path):
+            tasks = []
+            for task in self.loader.load_from_file(str(path)):
+                imported = task.get('ansible.builtin.import_tasks')
+                if imported:
+                    tasks.extend(load(path.parent / imported))
+                else:
+                    tasks.append(task)
+            return tasks
+
+        return trusted(load(ROOT / f'roles/{role}/tasks/main.yml'))
 
     def render(self, value, **extra):
         return Templar(loader=self.loader, variables={**self.values, **extra}).template(value)

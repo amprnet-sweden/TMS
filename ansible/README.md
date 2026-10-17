@@ -121,6 +121,12 @@ Run the backend authentication regression tests separately with Java 25:
 from `backend/`. The installer pins its controller, Node and Keycloak versions;
 review and update those pins deliberately.
 
+The backend, Keycloak and frontend/proxy roles use ordered static task imports
+from `tasks/main.yml`. Read these entry points to follow each role through its
+validation, installation, configuration, verification and reporting phases.
+Keycloak identity provisioning and frontend TLS/trust setup remain explicit
+phases within their respective roles.
+
 Shared target paths are defined in `vars/common.yml`. The Java version is defined
 in `vars/build.yml`; source preparation checks that `backend/build.gradle`
 selects the same compiler. Update both declarations together when upgrading Java.
@@ -144,9 +150,11 @@ repeat-run behavior throughout these changes.
   references such as `keycloak_paths.results[4]` with individually registered
   results or dictionaries keyed by meaningful names, especially in ownership
   and prerequisite checks.
-- [ ] **Split large roles into named phases.** Extract validation, installation,
+- [x] **Split large roles into named phases.** Extract validation, installation,
   configuration, verification and reporting task files from the backend,
-  Keycloak and frontend/proxy roles. Preserve task order and handler boundaries.
+  Keycloak and frontend/proxy roles. Static imports preserve task order and
+  handler boundaries; identity provisioning and HTTPS trust setup have their
+  own phases within their existing roles.
 - [ ] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
   certificate installation and backend Java trust-store setup into a dedicated
   role so service prerequisites are explicit.

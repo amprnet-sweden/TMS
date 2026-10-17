@@ -1,0 +1,48 @@
+---
+- name: Install the explicit native application configuration
+  ansible.builtin.template:
+    src: application.yaml.j2
+    dest: /etc/tms-backend/application.yaml
+    owner: root
+    group: tms-backend
+    mode: '0640'
+  notify: Restart TMS backend
+
+- name: Install the root-readable service credentials
+  ansible.builtin.template:
+    src: backend.env.j2
+    dest: "{{ tms_database_state_directory }}/backend.env"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Restart TMS backend
+
+- name: Activate the verified release
+  ansible.builtin.file:
+    src: "/opt/tms-backend/releases/{{ backend_build.backend_sha256 }}"
+    dest: /opt/tms-backend/current
+    state: link
+    owner: root
+    group: root
+  notify: Restart TMS backend
+
+- name: Install the native backend service
+  ansible.builtin.template:
+    src: tms-backend.service.j2
+    dest: /etc/systemd/system/tms-backend.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart TMS backend
+
+- name: Apply backend changes before verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the backend at boot and ensure it is running
+  ansible.builtin.systemd_service:
+    name: tms-backend
+    state: started
+    enabled: true
+    daemon_reload: true

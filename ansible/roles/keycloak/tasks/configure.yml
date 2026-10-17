@@ -1,0 +1,51 @@
+---
+- name: Configure Keycloak behind the local HTTPS proxy
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: "{{ tms_keycloak_home }}/conf/keycloak.conf"
+    owner: root
+    group: keycloak
+    mode: '0640'
+  notify: Restart Keycloak
+
+- name: Install the root-readable database environment
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: "{{ tms_database_state_directory }}/keycloak.env"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  diff: false
+  notify: Restart Keycloak
+
+- name: Supply temporary bootstrap credentials until setup completes
+  ansible.builtin.template:
+    src: bootstrap.env.j2
+    dest: "{{ tms_database_state_directory }}/keycloak-bootstrap.env"
+    owner: root
+    group: root
+    mode: '0600'
+  when: not keycloak_paths.ready.exists
+  no_log: true
+  diff: false
+  notify: Restart Keycloak
+
+- name: Install the Keycloak service
+  ansible.builtin.template:
+    src: tms-keycloak.service.j2
+    dest: /etc/systemd/system/tms-keycloak.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Keycloak
+
+- name: Apply pending Keycloak changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable Keycloak at boot and ensure it is running
+  ansible.builtin.systemd_service:
+    name: tms-keycloak
+    enabled: true
+    state: started
+    daemon_reload: true

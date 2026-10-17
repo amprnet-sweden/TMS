@@ -1,0 +1,118 @@
+---
+- name: Read the existing build and database ownership reports
+  ansible.builtin.slurp:
+    src: "{{ item.path }}"
+  loop:
+    - name: build_report
+      path: "{{ tms_build_root }}/build-report.json"
+    - name: database_owner
+      path: "{{ tms_database_state_directory }}/database-owner.json"
+    - name: keycloak_ready
+      path: "{{ tms_database_state_directory }}/keycloak-ready"
+  loop_control:
+    label: "{{ item.name }}"
+  register: backend_inputs_inspection
+
+- name: Index backend inputs by name
+  ansible.builtin.set_fact:
+    backend_inputs: >-
+      {{ dict(backend_inputs_inspection.results | map(attribute='item.name') |
+              zip(backend_inputs_inspection.results | map(attribute='content'))) }}
+
+- name: Decode the successful build report
+  ansible.builtin.set_fact:
+    backend_build: "{{ backend_inputs.build_report | b64decode | from_json }}"
+
+- name: Require the original deployment and a managed source artifact
+  ansible.builtin.assert:
+    that:
+      - (backend_inputs.database_owner | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - backend_inputs.keycloak_ready | b64decode | trim == tms_database_deployment_id
+      - backend_build.public_origin == tms_public_origin
+      - backend_build.backend_jar is match('^' ~ (tms_build_root | regex_escape) ~ '/backend/[a-f0-9]{64}/backend/app.jar$')
+      - backend_build.backend_sha256 is match('^[a-f0-9]{64}$')
+
+- name: Verify the built JAR checksum before deployment
+  ansible.builtin.stat:
+    path: "{{ backend_build.backend_jar }}"
+    checksum_algorithm: sha256
+  register: backend_source
+
+- name: Require an intact regular JAR file
+  ansible.builtin.assert:
+    that:
+      - backend_source.stat.isreg | default(false)
+      - not backend_source.stat.islnk | default(true)
+      - backend_source.stat.checksum | default('') == backend_build.backend_sha256
+
+- name: Inspect backend ownership and prerequisite paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - name: owner
+      path: "{{ tms_database_state_directory }}/backend-owner.json"
+    - name: installation
+      path: /opt/tms-backend
+    - name: configuration
+      path: /etc/tms-backend
+    - name: data
+      path: /var/lib/tms-backend
+    - name: service
+      path: /etc/systemd/system/tms-backend.service
+    - name: trust_store
+      path: "{{ tms_backend_trust_store }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: backend_paths_inspection
+
+- name: Index backend paths by name
+  ansible.builtin.set_fact:
+    backend_paths: >-
+      {{ dict(backend_paths_inspection.results | map(attribute='item.name') |
+              zip(backend_paths_inspection.results | map(attribute='stat'))) }}
+
+- name: Inspect the existing backend service account
+  ansible.builtin.getent:
+    database: passwd
+    key: tms-backend
+    fail_key: false
+
+- name: Require Java trust and refuse an unmanaged backend installation
+  ansible.builtin.assert:
+    that:
+      - backend_paths.trust_store.isreg | default(false)
+      - >-
+        backend_paths.owner.exists or
+        (not backend_paths.installation.exists and not backend_paths.configuration.exists
+         and not backend_paths.data.exists and not backend_paths.service.exists
+         and not ansible_facts.getent_passwd['tms-backend'])
+    fail_msg: Complete HTTPS setup first. Existing unmanaged backend files or accounts require explicit migration.
+
+- name: Read the existing backend ownership record
+  ansible.builtin.slurp:
+    src: "{{ tms_database_state_directory }}/backend-owner.json"
+  register: backend_owner
+  when: backend_paths.owner.exists
+
+- name: Reject a different vault or implicit application upgrade
+  ansible.builtin.assert:
+    that:
+      - (backend_owner.content | b64decode | from_json).deployment_id == tms_database_deployment_id
+      - (backend_owner.content | b64decode | from_json).backend_sha256 == backend_build.backend_sha256
+    fail_msg: This installation stage preserves its original release. Application upgrades require a backup and migration procedure.
+  when: backend_paths.owner.exists
+
+- name: Inspect the application database before the first installation
+  ansible.mariadb.mariadb_query:
+    login_user: root
+    login_unix_socket: "{{ tms_database_socket }}"
+    config_file: ''
+    query: SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = 'tms'
+  register: backend_tables
+  when: not backend_paths.owner.exists
+
+- name: Refuse to adopt an existing application database
+  ansible.builtin.assert:
+    that:
+      - backend_tables.query_result[0][0].table_count | int == 0
+  when: not backend_paths.owner.exists
