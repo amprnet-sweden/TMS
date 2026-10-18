@@ -2,12 +2,12 @@
 """Create and validate reusable certificates for the single-host HTTPS installation."""
 from datetime import datetime, timedelta, timezone
 import hashlib
-import json
 import os
 from pathlib import Path
 import sys
 
 from deployment import load
+from controller import controller_directory, local_directory, run_cli, write_variables
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -97,23 +97,21 @@ def main():
     if len(sys.argv) != 2:
         raise SystemExit('Usage: prepare-tls.py DEPLOYMENT.json')
     configuration = load(Path(sys.argv[1]))
-    controller = Path(os.environ.get("TMS_CONTROLLER_DIR", Path.home() / ".local/share/tms-ansible"))
+    controller = controller_directory()
     directory = controller / "tls"
     ca, server = prepare(directory, configuration['tms_hostname'])
-    local = Path(__file__).resolve().parents[1] / ".local"
-    local.mkdir(exist_ok=True)
+    local = local_directory()
     # Only the public CA is exported to the checkout.
     (local / "tms-installation-ca.crt").write_bytes((directory / "ca.crt").read_bytes())
     variables = {
-        **configuration,
         "tms_tls_source_directory": str(directory),
         "tms_tls_ca_sha256": hashlib.sha256((directory / "ca.crt").read_bytes()).hexdigest(),
         "tms_tls_ca_der_sha256": ca.fingerprint(hashes.SHA256()).hex(),
         "tms_tls_server_expires": server.not_valid_after_utc.isoformat(),
     }
-    (local / "tls-vars.json").write_text(json.dumps(variables, indent=2) + "\n")
+    write_variables("tls-vars.json", variables, local)
     print("Certificates validated and reused when present; CA private key remains on the controller.")
 
 
 if __name__ == "__main__":
-    main()
+    run_cli(main)
