@@ -109,6 +109,11 @@ and are not part of the automated installer checks.
 
 ## Development checks
 
+The `Native installer checks` GitHub Actions workflow runs these checks on every
+pull request and push to `main`, using `scripts/setup-controller.sh` for the same
+pinned controller dependencies as local development. It checks both resource
+profiles without connecting to a deployment host.
+
 ```bash
 "$TMS_CONTROLLER_DIR/venv/bin/python" -m unittest discover -s tests -v
 "$TMS_CONTROLLER_DIR/venv/bin/ansible-galaxy" collection install -r requirements.yml -p .local/collections
@@ -166,7 +171,7 @@ repeat-run behavior throughout these changes.
 - [x] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
   certificate installation and backend Java trust-store setup into a dedicated
   role so service prerequisites are explicit.
-- [ ] **Run installer checks in CI.** Run the Python helper tests, playbook
+- [x] **Run installer checks in CI.** Run the Python helper tests, playbook
   syntax checks for both resource profiles and shell syntax checks on pull
   requests, using the pinned controller dependencies.
 - [ ] **Extract common controller and vault utilities.** Share controller-path
