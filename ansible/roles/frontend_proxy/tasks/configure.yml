@@ -1,7 +1,7 @@
 ---
 - name: Derive the immutable frontend release directory
   ansible.builtin.set_fact:
-    frontend_proxy_release: "/srv/tms/releases/{{ frontend_proxy_build.frontend_directory.split('/')[-3] }}"
+    frontend_proxy_release: "/srv/tms/releases/{{ frontend_proxy_build.frontend_fingerprint }}"
 
 - name: Copy frontend assets into a root-owned release
   ansible.builtin.copy:

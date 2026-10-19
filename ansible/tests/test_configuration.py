@@ -88,8 +88,8 @@ class ConfigurationTests(unittest.TestCase):
                 ('backend', 'backend_build', f'backend/{digest}/backend/app.jar'),
                 ('frontend_proxy', 'frontend_proxy_build', f'frontend/{digest}/frontend/dist')):
             task = next(t for t in self.tasks(role) if t['name'].startswith('Require ') and
-                        any('regex_escape' in c for c in t.get('ansible.builtin.assert', {}).get('that', [])))
-            condition = next(c for c in task['ansible.builtin.assert']['that'] if 'regex_escape' in c)
+                        any('regex_escape' in c and key in c for c in t.get('ansible.builtin.assert', {}).get('that', [])))
+            condition = next(c for c in task['ansible.builtin.assert']['that'] if 'regex_escape' in c and key in c)
             field = 'backend_jar' if role == 'backend' else 'frontend_directory'
             templar = Templar(variables={'tms_build_root': build_root, key: {field: f'{build_root}/{artifact}'}})
             self.assertTrue(templar.evaluate_expression(condition))

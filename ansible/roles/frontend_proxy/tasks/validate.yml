@@ -8,6 +8,11 @@
   ansible.builtin.set_fact:
     frontend_proxy_build: "{{ frontend_proxy_report_file.content | b64decode | from_json }}"
 
+- name: Validate the build report contract before frontend deployment
+  ansible.builtin.import_tasks: ../../../tasks/validate-build-report.yml
+  vars:
+    tms_build_report: "{{ frontend_proxy_build }}"
+
 - name: Require matching build URLs and a managed artifact path
   ansible.builtin.assert:
     that:

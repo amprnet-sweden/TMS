@@ -23,6 +23,11 @@
   ansible.builtin.set_fact:
     backend_build: "{{ backend_inputs.build_report | b64decode | from_json }}"
 
+- name: Validate the build report contract before backend deployment
+  ansible.builtin.import_tasks: ../../../tasks/validate-build-report.yml
+  vars:
+    tms_build_report: "{{ backend_build }}"
+
 - name: Require the original deployment and a managed source artifact
   ansible.builtin.assert:
     that:
