@@ -144,6 +144,22 @@ Shared target paths are defined in `vars/common.yml`. The Java version is define
 in `vars/build.yml`; source preparation checks that `backend/build.gradle`
 selects the same compiler. Update both declarations together when upgrading Java.
 
+Controller helpers share path resolution, vault I/O, file validation and safe
+error reporting in `scripts/controller.py`. Only `prepare-database-vault.py`
+initializes credentials; `prepare-keycloak-vault.py` adds missing Keycloak fields
+to a complete database vault. Existing credentials and unchanged ciphertext are
+preserved, and incomplete credentials or unfinished updates require deliberate
+recovery. `show-keycloak-login.py` uses the same validated vault access.
+
+`install.sh` first runs `prepare-deployment.py DEPLOYMENT.json` to generate
+`.local/deployment-vars.json` independently of certificates or vault state.
+`prepare-tls.py` reads the same deployment settings and writes only certificate
+paths, fingerprints and expiry to `.local/tls-vars.json`. The installer passes
+both files explicitly. For manual stage invocations, pass
+`--extra-vars @.local/deployment-vars.json` alongside the source, TLS and vault
+inputs that stage requires; general deployment settings are no longer bundled
+into `tls-vars.json`.
+
 ## Planned improvements
 
 The following improvements are listed in approximate priority order. Preserve
@@ -174,7 +190,7 @@ repeat-run behavior throughout these changes.
 - [x] **Run installer checks in CI.** Run the Python helper tests, playbook
   syntax checks for both resource profiles and shell syntax checks on pull
   requests, using the pinned controller dependencies.
-- [ ] **Extract common controller and vault utilities.** Share controller-path
+- [x] **Extract common controller and vault utilities.** Share controller-path
   resolution, vault access, validation and error handling between Python
   helpers while retaining explicit credential-preservation rules. Separate
   general deployment-variable generation from certificate preparation so

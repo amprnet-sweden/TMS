@@ -12,6 +12,8 @@ def load(path):
     if not isinstance(profile, str) or profile not in ('standard', 'pi_1gb_experimental'):
         raise ValueError('Select standard or pi_1gb_experimental resource profile.')
     origin = values.get('tms_public_origin', '')
+    if not isinstance(origin, str):
+        raise ValueError('Use an HTTPS origin string.')
     url = urlsplit(origin)
     host = url.hostname or ''
     if (url.scheme != 'https' or url.username or url.password or url.path or url.query or url.fragment
