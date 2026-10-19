@@ -1,0 +1,70 @@
+---
+- name: Require a versioned build report
+  ansible.builtin.assert:
+    that:
+      - tms_build_report is mapping
+      - tms_build_report.schema_version is defined
+      - tms_build_report.schema_version is integer
+      - tms_build_report.schema_version == 1
+    fail_msg: Unsupported build report. Run the build stage with this installer to generate schema version 1.
+
+- name: Require build report fields and types
+  ansible.builtin.assert:
+    that:
+      - tms_build_report[item] is defined
+      - tms_build_report[item] is string
+      - tms_build_report[item] | length > 0
+    fail_msg: "Missing or invalid build report field: {{ item }}. Run the build stage with this installer."
+  loop:
+    - source_base_commit
+    - source_sha256
+    - recipe_sha256
+    - public_origin
+    - backend_fingerprint
+    - frontend_fingerprint
+    - backend_jar
+    - backend_sha256
+    - frontend_directory
+
+- name: Require build report digests
+  ansible.builtin.assert:
+    that:
+      - tms_build_report[item] is match('^[a-f0-9]{64}$')
+    fail_msg: "Invalid SHA-256 in build report field: {{ item }}."
+  loop:
+    - source_sha256
+    - recipe_sha256
+    - backend_fingerprint
+    - frontend_fingerprint
+    - backend_sha256
+
+- name: Require consistent build report provenance and artifact locations
+  ansible.builtin.assert:
+    that:
+      - tms_build_report.source_base_commit is match('^[a-f0-9]{40}$')
+      - tms_build_report.public_origin == tms_public_origin
+      - tms_build_report.backend_jar == tms_build_root ~ '/backend/' ~ tms_build_report.backend_fingerprint ~ '/backend/app.jar'
+      - tms_build_report.frontend_directory == tms_build_root ~ '/frontend/' ~ tms_build_report.frontend_fingerprint ~ '/frontend/dist'
+      - tms_build_report.frontend_files is defined
+      - tms_build_report.frontend_files is mapping
+      - tms_build_report.frontend_files | length > 0
+    fail_msg: Build report provenance, URLs or artifact paths are inconsistent. Run the build stage with this installer.
+
+- name: Require a valid frontend checksum manifest
+  ansible.builtin.assert:
+    that:
+      - item.key is string
+      - item.key is match('^' ~ (tms_build_report.frontend_directory | regex_escape) ~ '/[^/].*$')
+      - item.key is not search('/[.]{1,2}(/|$)')
+      - item.value is string
+      - item.value is match('^[a-f0-9]{64}$')
+    fail_msg: Invalid frontend path or checksum in the build report.
+  loop: "{{ tms_build_report.frontend_files | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Require the frontend entry point in the build report
+  ansible.builtin.assert:
+    that:
+      - (tms_build_report.frontend_directory ~ '/index.html') in tms_build_report.frontend_files
+    fail_msg: The build report must include frontend index.html.

@@ -52,6 +52,9 @@
     content: "{{ build_report | to_nice_json }}\n"
   vars:
     build_report:
+      schema_version: 1
+      backend_fingerprint: "{{ build_backend_fingerprint }}"
+      frontend_fingerprint: "{{ build_frontend_fingerprint }}"
       resource_profile: "{{ tms_resource_profile | default('standard') }}"
       resources: "{{ tms_resources }}"
       source_kind: development snapshot (not a committed release)

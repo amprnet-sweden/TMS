@@ -160,6 +160,20 @@ both files explicitly. For manual stage invocations, pass
 inputs that stage requires; general deployment settings are no longer bundled
 into `tls-vars.json`.
 
+The build stage writes `{{ tms_build_root }}/build-report.json` as the interface
+to frontend and backend deployment. Schema version 1 includes explicit
+`backend_fingerprint` and `frontend_fingerprint` values, source/recipe provenance,
+artifact locations, the backend SHA-256 and the frontend file checksum manifest.
+Both consumers validate the version, required fields, canonical origin and
+fingerprinted artifact paths before checking the actual artifact checksums.
+Frontend release identifiers come from `frontend_fingerprint`; backend releases
+remain identified by the JAR checksum. Additional informational fields are allowed.
+Unversioned or unsupported reports are rejected; rerun the build stage with the
+same installer to regenerate them. Existing ownership and upgrade guards still
+apply. Changes to the build role also change the recipe fingerprint and may
+rebuild artifacts, so use a fresh target for validating this change rather than
+bypassing the backend upgrade guard on an existing deployment.
+
 ## Planned improvements
 
 The following improvements are listed in approximate priority order. Preserve
@@ -195,10 +209,17 @@ repeat-run behavior throughout these changes.
   helpers while retaining explicit credential-preservation rules. Separate
   general deployment-variable generation from certificate preparation so
   deployment settings no longer depend on `tls-vars.json`.
-- [ ] **Make the build report an explicit interface between stages.** Include
+- [x] **Make the build report an explicit interface between stages.** Include
   frontend/backend fingerprints and a report schema version, and validate
   required fields when consuming the report. Stop deriving release identifiers
   by splitting artifact directory paths.
+- [ ] **Show progress during long installation tasks.** Ensure status output
+  appears promptly when piped to logs, add timestamps and elapsed time, and
+  provide periodic status during builds, package installation and service
+  readiness waits. Distinguish a running job from evidence of actual progress;
+  expose bounded, credential-free build-log excerpts where useful. Preserve
+  timeouts, failure exit codes and unchanged-run behavior. Document what users
+  should expect and how to inspect a long-running task safely.
 - [ ] **Run preflight once during a complete installation.** Extract reusable
   stage plays so `site.yml` performs preflight once while standalone stage
   entry points retain their checks.
