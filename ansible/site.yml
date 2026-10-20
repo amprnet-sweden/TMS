@@ -1,11 +1,13 @@
 ---
+- name: Check the target once before installation
+  ansible.builtin.import_playbook: preflight.yml
 - name: Build application artifacts
-  ansible.builtin.import_playbook: build.yml
+  ansible.builtin.import_playbook: build-stage.yml
 - name: Prepare databases
-  ansible.builtin.import_playbook: database.yml
+  ansible.builtin.import_playbook: database-stage.yml
 - name: Serve frontend and HTTPS proxy
-  ansible.builtin.import_playbook: https.yml
+  ansible.builtin.import_playbook: https-stage.yml
 - name: Configure identity service
-  ansible.builtin.import_playbook: keycloak.yml
+  ansible.builtin.import_playbook: keycloak-stage.yml
 - name: Start and verify application
-  ansible.builtin.import_playbook: backend.yml
+  ansible.builtin.import_playbook: backend-stage.yml

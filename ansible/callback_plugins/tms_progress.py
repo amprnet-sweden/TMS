@@ -66,8 +66,9 @@ def phase_for(task):
              'frontend_proxy': 'https', 'keycloak': 'keycloak', 'backend': 'application'}
     if role in roles:
         return roles[role]
+    filename = Path(path).name.replace('-stage.yml', '.yml')
     return {'preflight.yml': 'preflight', 'build.yml': 'prerequisites', 'database.yml': 'database',
-            'https.yml': 'https', 'keycloak.yml': 'keycloak', 'backend.yml': 'application'}.get(Path(path).name)
+            'https.yml': 'https', 'keycloak.yml': 'keycloak', 'backend.yml': 'application'}.get(filename)
 
 
 def safe_milestone(line):

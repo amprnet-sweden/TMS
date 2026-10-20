@@ -48,7 +48,7 @@ repeat-run behavior throughout these changes.
   expose bounded, credential-free build-log excerpts where useful. Preserve
   timeouts, failure exit codes and unchanged-run behavior. Document what users
   should expect and how to inspect a long-running task safely.
-- [ ] **Run preflight once during a complete installation.** Extract reusable
+- [x] **Run preflight once during a complete installation.** Extract reusable
   stage plays so `site.yml` performs preflight once while standalone stage
   entry points retain their checks.
 - [ ] **Support existing HTTPS certificates.** Allow operators to supply a

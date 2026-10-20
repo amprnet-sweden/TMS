@@ -13,9 +13,11 @@ profiles without connecting to a deployment host.
 "$TMS_CONTROLLER_DIR/venv/bin/python" -m unittest discover -s tests -v
 "$TMS_CONTROLLER_DIR/venv/bin/ansible-galaxy" collection install -r requirements.yml -p .local/collections
 for profile in standard pi_1gb_experimental; do
-  ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
-    "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
-      site.yml --syntax-check -e "tms_resource_profile=$profile" || exit
+  for playbook in site build database https keycloak backend; do
+    ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
+      "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
+        "$playbook.yml" --syntax-check -e "tms_resource_profile=$profile" || exit
+  done
 done
 bash -n install.sh scripts/setup-controller.sh
 ```
@@ -24,6 +26,35 @@ Run the backend authentication regression tests separately with Java 25:
 `./gradlew test --tests se.amprnet.tms.messaging.WebSocketAuthenticatorServiceTests`
 from `backend/`. The installer pins its controller, Node and Keycloak versions;
 review and update those pins deliberately.
+
+## Playbook entry points
+
+`site.yml` imports `preflight.yml` once, then the reusable `build-stage.yml`,
+`database-stage.yml`, `https-stage.yml`, `keycloak-stage.yml` and `backend-stage.yml`
+plays in that order. The standalone `build.yml`, `database.yml`, `https.yml`,
+`keycloak.yml` and `backend.yml` wrappers each import preflight before their stage.
+Use those wrappers for manual stage runs. The `*-stage.yml` files are internal
+composition units and assume preflight has already established target facts and
+the selected `tms_resources` host fact. Stage-specific credential, artifact and
+ownership checks still run in their original order.
+
+This removes four repeated fact-gathering and sudo-verification passes from a
+complete installation. It does not establish a measured wall-clock saving on
+every target. Both resource profiles and standalone wrappers are checked locally.
+The extracted build play is included in source preparation's build-recipe hash;
+this refactor changes that hash once. Validate full installation on a fresh target,
+preserving the existing backend upgrade guard on already managed hosts.
+
+Validation on 20 October 2026 passed 67 helper/regression tests and all 12
+entry-point/profile syntax checks. A fresh standard-profile Debian 13 ARM64 VM
+installation completed with `ok=222 changed=88 failed=0`; its unchanged rerun
+completed with `ok=195 changed=0 failed=0`. Each pass gathered facts and ran
+preflight exactly once. Authenticated application checks passed on both passes;
+the rerun ran no handlers and preserved service process/start/restart state and
+controller credential/TLS bytes. Generated passwords were absent from both logs.
+The verbose runs took 44m 43s and 16m 18s respectively; these are observations,
+not controlled performance benchmarks. The Pi profile received helper/syntax
+coverage; browser workflows, reboot and recovery acceptance remain separate.
 
 The backend, Keycloak and frontend/proxy roles use ordered static task imports
 from `tasks/main.yml`. Read these entry points to follow each role through its
@@ -81,7 +112,8 @@ The compact callback groups tasks into preflight, prerequisites, backend build,
 frontend build, database, HTTPS, Keycloak, application deployment and verification.
 It uses existing role names, task-file paths and the known component include
 variable (`backend`/`frontend`); it does not template or print arbitrary task variables.
-Repeated stage preflights still execute but are presented once. Unchanged phases
+The full installer executes preflight once; standalone stages retain their own
+preflight checks. Unchanged phases
 are labelled accordingly. Phase timing covers Ansible execution, not controller
 preparation or password entry before the playbook starts.
 
