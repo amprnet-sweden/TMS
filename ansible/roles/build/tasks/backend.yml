@@ -2,6 +2,9 @@
 - name: "Build the backend with the single Java {{ tms_java_version }} installation (tests explicitly skipped)"
   ansible.builtin.command:
     argv:
+      - /usr/bin/python3
+      - /usr/local/lib/tms-ansible/build-status.py
+      - "{{ component_directory }}/backend/build-status.log"
       - /bin/bash
       - ./gradlew
       - --no-daemon
@@ -17,7 +20,12 @@
   environment: "{{ {'JAVA_HOME': tms_java_home} | combine(tms_resources.gradle_environment) }}"
   async: 3600
   poll: 15
+  register: build_backend_status
   changed_when: true
+
+- name: Show bounded backend build milestones
+  ansible.builtin.debug:
+    var: build_backend_status.stdout_lines
 
 - name: Find the executable Spring Boot JAR
   ansible.builtin.find:

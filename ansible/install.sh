@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 ansible_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 controller_dir="${TMS_CONTROLLER_DIR:-$HOME/.local/share/tms-ansible}"
+output_callback=tms_progress
+if [[ "${1:-}" == --verbose ]]; then
+    output_callback=default
+    shift
+fi
 if [[ $# -ne 2 || ! -f "$1" || ! -f "$2" ]]; then
-    echo 'Usage: bash install.sh INVENTORY.yml DEPLOYMENT.json' >&2
+    echo 'Usage: bash install.sh [--verbose] INVENTORY.yml DEPLOYMENT.json' >&2
     exit 1
 fi
 inventory="$(realpath -- "$1")"
 deployment="$(realpath -- "$2")"
 export ANSIBLE_COLLECTIONS_PATH="$ansible_dir/.local/collections"
+export ANSIBLE_CALLBACK_PLUGINS="$ansible_dir/callback_plugins${ANSIBLE_CALLBACK_PLUGINS:+:$ANSIBLE_CALLBACK_PLUGINS}"
+export ANSIBLE_STDOUT_CALLBACK="$output_callback"
 python="$controller_dir/venv/bin/python"
 if [[ ! -x "$python" ]]; then
     echo 'Run bash scripts/setup-controller.sh first.' >&2

@@ -7,19 +7,33 @@
 
 - name: Install the exact frontend dependency tree
   ansible.builtin.command:
-    argv: ["{{ tms_node_home }}/bin/npm", ci, '--include=dev', '--no-audit', '--no-fund']
+    argv: [/usr/bin/python3, /usr/local/lib/tms-ansible/build-status.py,
+           "{{ component_directory }}/frontend/dependencies-status.log",
+           "{{ tms_node_home }}/bin/npm", ci, '--include=dev', '--no-audit', '--no-fund']
     chdir: "{{ component_directory }}/frontend"
   async: 3600
   poll: 15
+  register: build_frontend_dependencies_status
   changed_when: true
+
+- name: Show bounded frontend dependency milestones
+  ansible.builtin.debug:
+    var: build_frontend_dependencies_status.stdout_lines
 
 - name: Build the frontend
   ansible.builtin.command:
-    argv: ["{{ tms_node_home }}/bin/npm", run, build]
+    argv: [/usr/bin/python3, /usr/local/lib/tms-ansible/build-status.py,
+           "{{ component_directory }}/frontend/build-status.log",
+           "{{ tms_node_home }}/bin/npm", run, build]
     chdir: "{{ component_directory }}/frontend"
   async: 3600
   poll: 15
+  register: build_frontend_status
   changed_when: true
+
+- name: Show bounded frontend build milestones
+  ansible.builtin.debug:
+    var: build_frontend_status.stdout_lines
 
 - name: Verify that the frontend entry point was produced
   ansible.builtin.stat:

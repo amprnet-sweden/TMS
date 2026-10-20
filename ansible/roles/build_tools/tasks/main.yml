@@ -49,6 +49,22 @@
     update_cache: true
     cache_valid_time: 86400
 
+- name: Create the root-owned build helper directory
+  ansible.builtin.file:
+    path: /usr/local/lib/tms-ansible
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the bounded build status helper
+  ansible.builtin.copy:
+    src: build-status.py
+    dest: /usr/local/lib/tms-ansible/build-status.py
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Create the root-owned build directory
   ansible.builtin.file:
     path: "{{ tms_build_root }}"

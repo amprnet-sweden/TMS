@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 
 # Run on Linux or in WSL. Everything lives in a dedicated user directory; no sudo.
 controller_dir="${TMS_CONTROLLER_DIR:-$HOME/.local/share/tms-ansible}"
