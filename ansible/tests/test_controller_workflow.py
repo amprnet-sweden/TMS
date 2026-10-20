@@ -88,6 +88,7 @@ else:
         self.executable("ansible-galaxy", "# Collection installation is covered by the syntax checks.\n")
         self.executable("ansible-playbook", '''
 import json
+import os
 from pathlib import Path
 import sys
 files = [Path(value[1:]) for index, value in enumerate(sys.argv) if index and sys.argv[index-1] == '--extra-vars']
@@ -102,6 +103,8 @@ assert values['tms_https_port'] == 9443
 assert values['tms_tenant'] == 'test-tenant'
 assert values['tms_resource_profile'] == 'pi_1gb_experimental'
 assert Path(values['tms_tls_source_directory'], 'ca.crt').is_file()
+assert os.environ['ANSIBLE_STDOUT_CALLBACK'] in ('tms_progress', 'default')
+(files[0].parent / 'selected-callback').write_text(os.environ['ANSIBLE_STDOUT_CALLBACK'])
 (files[0].parent / 'playbook-invoked').touch()
 ''')
         inventory = self.root / "inventory.yml"
@@ -119,6 +122,12 @@ assert Path(values['tms_tls_source_directory'], 'ca.crt').is_file()
         self.assertEqual(before, {p.name: p.read_bytes() for directory in (vault.directory, self.controller / "tls") for p in directory.iterdir()})
         for secret in values.values():
             self.assertNotIn(secret.encode(), result.stdout + result.stderr)
+        self.assertEqual((self.local / 'selected-callback').read_text(), 'tms_progress')
+        result = subprocess.run(["bash", str(self.checkout / "install.sh"), "--verbose", str(inventory), str(self.config)],
+                                env=self.env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertEqual((self.local / 'selected-callback').read_text(), 'default')
+        self.assertEqual(before, {p.name: p.read_bytes() for directory in (vault.directory, self.controller / "tls") for p in directory.iterdir()})
         (self.local / "playbook-invoked").unlink()
         self.config.write_text('{"tms_public_origin": false}')
         result = subprocess.run(command, env=self.env, capture_output=True)

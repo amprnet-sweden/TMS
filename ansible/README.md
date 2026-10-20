@@ -1,240 +1,67 @@
-# Native installation
+# Install TMS with Ansible
 
-Installs TMS on a dedicated **Debian 13 ARM64** host:
-Java 25, Node 22, MariaDB 11.8, Keycloak 26.8.1, NGINX, frontend and backend.
-Application builds run under an unprivileged account; services use separate
-accounts. Databases and application listeners bind to loopback. NGINX provides
-HTTPS, including WebSocket forwarding.
-The standard profile requires 4 GiB RAM; an experimental 1 GB profile is
-described below.
+Install TMS on a **dedicated Debian 13 ARM64** machine using Ansible.
+The installer sets up the application, MariaDB, Keycloak and HTTPS with NGINX.
 
-Installation and functional checks passed on an emulated ARM64 VM and a
-physical 1 GB Raspberry Pi 3 using the experimental profile. Validation covered
-on-target builds, API/STOMP checks, repeated runs with no changes, browser
-login/logout, incident saves, live updates between windows and automatic
-recovery after reboot. Browser saves and live updates also passed after reboot
-on the Pi. These checks cover installation and functional use; sustained
-workload capacity and backup restoration have not been validated.
+**Requirements:** A fresh Debian 13 ARM64 target with SSH, Python 3 and a sudo-capable account; a Linux or WSL controller with Git, Python 3 and pip; SSH key access from controller to target. The standard installation requires **4 GiB RAM**. A [1 GB experimental profile](docs/operations.md#experimental-1-gb-arm64-profile) is also available.
 
-## Install
+> **Important:** Use a fresh machine. The installer will not adopt existing unmanaged MariaDB, Keycloak, NGINX or TMS installations, and it manages the entire NGINX configuration. Each deployment supports one target.
 
-Use a fresh target with SSH, Python 3 and a sudo account already configured.
-The playbooks refuse to adopt existing unmanaged MariaDB, Keycloak, NGINX or
-TMS installations. They manage the complete NGINX configuration and support
-one target per deployment.
+## 1. Prepare the controller
 
-On a Linux controller or WSL, install Git and Python 3 with pip, clone this
-repository, and enter `ansible/`. Configure SSH key authentication to the target.
+Clone the [TMS repository](https://github.com/amprnet-sweden/TMS) and enter its `ansible/` directory. Make sure your SSH key works with the target machine. Then run:
 
 ```bash
 cp examples/inventory.yml inventory.yml
 cp examples/deployment.json deployment.json
-# Edit both copies: target address/account and the public HTTPS origin.
+```
+
+Edit **`inventory.yml`** with the target address and SSH account, and **`deployment.json`** with the public HTTPS origin. The hostname must resolve to your target from users' browsers. The HTTPS port must be reachable on the target and must **not be remapped through NAT**.
+
+## 2. Install
+
+```bash
 export TMS_CONTROLLER_DIR="$HOME/.local/share/tms-native"
 bash scripts/setup-controller.sh
 bash install.sh inventory.yml deployment.json
 ```
 
-`BECOME password` means the target account's sudo password. Builds can take
-several minutes under emulation. The source snapshot includes tracked working
-tree edits and the frontend lockfile; commit new application files before building.
-Builds skip Docker-dependent backend tests. No Docker installation is required.
+If asked for a `BECOME password`, enter the target account's **sudo password**. Installation includes compiling the application on the target and can take a while, particularly on slower hardware. No Docker installation is required.
 
-The configured DNS hostname must resolve to the target from browsers. The
-HTTPS port must be reachable and identical externally and on the target; do
-not remap it through NAT. The playbook maps that hostname to loopback inside
-the target. Configure HTTP redirect, public certificate issuance and firewall
-rules separately if required; the installer does not manage them.
+The installer reports major phases, elapsed time and a final success or failure summary. Long tasks print a brief waiting message once a minute. Use `bash install.sh --verbose inventory.yml deployment.json` for conventional Ansible output. See [installation logs and troubleshooting](docs/operations.md#watching-a-long-installation).
 
-The installer creates a private CA restricted to that hostname. Import the
-public `.local/tms-installation-ca.crt` into your browser/OS trust store.
-The CA private key stays on the controller. Certificate replacement and renewal
-are deliberate operations; expired or mismatched certificates cause a failure.
+## 3. Trust the HTTPS certificate
 
-Open `<public-origin>/tms/`. Retrieve the generated application login locally:
+The installer generates a private certificate authority for the configured hostname. Import the **public** certificate at `ansible/.local/tms-installation-ca.crt` into the browser or operating system trust store of each client that will access TMS. Do not distribute the private key.
+
+Publicly trusted certificate issuance, HTTP redirects and firewall rules are **not** automatically configured. The installer does not automatically renew or replace certificates; plan these tasks separately.
+
+## 4. Log in
+
+Open **`<public-origin>/tms/`** in your browser.
+
+On the controller, from `ansible/`, display the generated application account credentials:
 
 ```bash
 "$TMS_CONTROLLER_DIR/venv/bin/python" scripts/show-keycloak-login.py appuser
 ```
 
-Use `tms-admin` instead for `<public-origin>/auth/admin/master/console/`.
-These are application accounts, separate from the SSH account. The temporary
-bootstrap administrator is removed after permanent administrator verification.
-
-## Experimental 1 GB ARM64 profile
-
-To install on a 1 GB Debian 13 ARM64 host, explicitly add
-`"tms_resource_profile": "pi_1gb_experimental"` to deployment.json.
-Omitting this setting selects `standard` and retains the 4 GB requirement.
-The experimental profile requires at least 850 MiB usable RAM and uses
-256 MiB heaps for each Java service, one Gradle worker, bounded build heaps,
-and a smaller MariaDB buffer pool. JVM native memory is additional to heap.
-Installation and functional checks passed on a physical 1 GB Pi 3 with
-approximately 904 MiB of existing zram swap. This is an experimental profile;
-the result does not establish sustained workload capacity.
-
-The installer does not add or resize swap. On-target builds may be slow or
-fail on this hardware. Measure memory pressure, service restarts and latency
-during installation, concurrent browser use and reboot recovery before
-relying on the profile. Application builds run on the target; the installer
-does not support a separate build host.
-
-Read-only eligibility and sudo verification can be run before installation:
+For the Keycloak administration console, open **`<public-origin>/auth/admin/master/console/`** and use:
 
 ```bash
-"$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i inventory.yml preflight.yml \
-  -e tms_resource_profile=pi_1gb_experimental --ask-become-pass
+"$TMS_CONTROLLER_DIR/venv/bin/python" scripts/show-keycloak-login.py tms-admin
 ```
 
-## Repeat and preserve
+These accounts are distinct from the SSH account.
 
-Repeat the same install command to verify convergence. Keep the same
-`TMS_CONTROLLER_DIR`, inventory and deployment settings. Credentials are generated
-once and reused; existing passwords are not reset. Preserve the controller's
-`secrets/` and `tls/` directories securely for recovery. The vault password is
-stored alongside the encrypted vault with private filesystem permissions;
-protect backups of both as credentials. Never commit these directories.
+## 5. Keep installation credentials safe
 
-`.local/` contains generated archives, public CA, variables and reports and is
-ignored by Git. Reports omit credentials. The installer handles initial
-installation and repeat runs with the same application artifacts. It does not
-provide application backup/restore or upgrades; a changed installed backend
-artifact is rejected. Plan application backups, restoration and upgrades
-separately when operating a deployment.
+Securely back up the controller's **`secrets/` and `tls/`** directories and retain the same `TMS_CONTROLLER_DIR`, inventory and deployment configuration. Never commit these directories. The vault password is stored alongside the encrypted vault, so backups of both must be protected as credentials.
 
-Checks cover artifact hashes, database account isolation, HTTPS validation,
-Keycloak permissions and assets, migrations, authenticated API reads and STOMP
-authentication. Browser writes and two-window live updates are manual checks
-and are not part of the automated installer checks.
+You can rerun the installation command with unchanged settings and application artifacts. It preserves generated credentials and existing passwords. **This is not an application upgrade or backup/restore tool.** Changes to an installed backend artifact are rejected; plan backups, restoration and upgrades separately.
 
-## Development checks
+## Further information
 
-The `Native installer checks` GitHub Actions workflow runs these checks on every
-pull request and push to `main`, using `scripts/setup-controller.sh` for the same
-pinned controller dependencies as local development. It checks both resource
-profiles without connecting to a deployment host.
-
-```bash
-"$TMS_CONTROLLER_DIR/venv/bin/python" -m unittest discover -s tests -v
-"$TMS_CONTROLLER_DIR/venv/bin/ansible-galaxy" collection install -r requirements.yml -p .local/collections
-for profile in standard pi_1gb_experimental; do
-  ANSIBLE_COLLECTIONS_PATH="$PWD/.local/collections" \
-    "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
-      site.yml --syntax-check -e "tms_resource_profile=$profile" || exit
-done
-bash -n install.sh scripts/setup-controller.sh
-```
-
-Run the backend authentication regression tests separately with Java 25:
-`./gradlew test --tests se.amprnet.tms.messaging.WebSocketAuthenticatorServiceTests`
-from `backend/`. The installer pins its controller, Node and Keycloak versions;
-review and update those pins deliberately.
-
-The backend, Keycloak and frontend/proxy roles use ordered static task imports
-from `tasks/main.yml`. Read these entry points to follow each role through its
-validation, installation, configuration, verification and reporting phases.
-Keycloak identity provisioning remains an explicit phase. In `https.yml`, the
-`tls` role runs before `frontend_proxy`: it checks HTTPS ownership and the CA pin,
-installs certificates, maps the canonical hostname and prepares the backend Java
-trust store. Java must already be installed by the build stage. Certificate changes
-notify the proxy role's NGINX handlers, which run after proxy configuration and
-before HTTPS verification.
-
-Shared target paths are defined in `vars/common.yml`. The Java version is defined
-in `vars/build.yml`; source preparation checks that `backend/build.gradle`
-selects the same compiler. Update both declarations together when upgrading Java.
-
-Controller helpers share path resolution, vault I/O, file validation and safe
-error reporting in `scripts/controller.py`. Only `prepare-database-vault.py`
-initializes credentials; `prepare-keycloak-vault.py` adds missing Keycloak fields
-to a complete database vault. Existing credentials and unchanged ciphertext are
-preserved, and incomplete credentials or unfinished updates require deliberate
-recovery. `show-keycloak-login.py` uses the same validated vault access.
-
-`install.sh` first runs `prepare-deployment.py DEPLOYMENT.json` to generate
-`.local/deployment-vars.json` independently of certificates or vault state.
-`prepare-tls.py` reads the same deployment settings and writes only certificate
-paths, fingerprints and expiry to `.local/tls-vars.json`. The installer passes
-both files explicitly. For manual stage invocations, pass
-`--extra-vars @.local/deployment-vars.json` alongside the source, TLS and vault
-inputs that stage requires; general deployment settings are no longer bundled
-into `tls-vars.json`.
-
-The build stage writes `{{ tms_build_root }}/build-report.json` as the interface
-to frontend and backend deployment. Schema version 1 includes explicit
-`backend_fingerprint` and `frontend_fingerprint` values, source/recipe provenance,
-artifact locations, the backend SHA-256 and the frontend file checksum manifest.
-Both consumers validate the version, required fields, canonical origin and
-fingerprinted artifact paths before checking the actual artifact checksums.
-Frontend release identifiers come from `frontend_fingerprint`; backend releases
-remain identified by the JAR checksum. Additional informational fields are allowed.
-Unversioned or unsupported reports are rejected; rerun the build stage with the
-same installer to regenerate them. Existing ownership and upgrade guards still
-apply. Changes to the build role also change the recipe fingerprint and may
-rebuild artifacts, so use a fresh target for validating this change rather than
-bypassing the backend upgrade guard on an existing deployment.
-
-## Planned improvements
-
-The following improvements are listed in approximate priority order. Preserve
-existing ownership checks, credential preservation, checksum verification and
-repeat-run behavior throughout these changes.
-
-- [x] **Define the Java version once.** Introduce `tms_java_version` and derive
-  the package name, Java home, version assertions and task descriptions from it.
-  Pass the Java executable to backend verification and the expected version to
-  source preparation. Check that the independently declared Gradle toolchain
-  requirement agrees with the installer.
-- [x] **Use shared paths consistently across roles.** Move shared paths into
-  common variables and replace hardcoded copies of `tms_build_root`,
-  `tms_database_socket` and `tms_database_state_directory`, including paths in
-  artifact validation patterns.
-- [x] **Replace numbered inspection results with named results.** Replace
-  references such as `keycloak_paths.results[4]` with individually registered
-  results or dictionaries keyed by meaningful names, especially in ownership
-  and prerequisite checks.
-- [x] **Split large roles into named phases.** Extract validation, installation,
-  configuration, verification and reporting task files from the backend,
-  Keycloak and frontend/proxy roles. Static imports preserve task order and
-  handler boundaries; identity provisioning and HTTPS trust setup have their
-  own phases within their existing roles.
-- [x] **Separate TLS and Java trust setup from the frontend/proxy role.** Move
-  certificate installation and backend Java trust-store setup into a dedicated
-  role so service prerequisites are explicit.
-- [x] **Run installer checks in CI.** Run the Python helper tests, playbook
-  syntax checks for both resource profiles and shell syntax checks on pull
-  requests, using the pinned controller dependencies.
-- [x] **Extract common controller and vault utilities.** Share controller-path
-  resolution, vault access, validation and error handling between Python
-  helpers while retaining explicit credential-preservation rules. Separate
-  general deployment-variable generation from certificate preparation so
-  deployment settings no longer depend on `tls-vars.json`.
-- [x] **Make the build report an explicit interface between stages.** Include
-  frontend/backend fingerprints and a report schema version, and validate
-  required fields when consuming the report. Stop deriving release identifiers
-  by splitting artifact directory paths.
-- [ ] **Show progress during long installation tasks.** Ensure status output
-  appears promptly when piped to logs, add timestamps and elapsed time, and
-  provide periodic status during builds, package installation and service
-  readiness waits. Distinguish a running job from evidence of actual progress;
-  expose bounded, credential-free build-log excerpts where useful. Preserve
-  timeouts, failure exit codes and unchanged-run behavior. Document what users
-  should expect and how to inspect a long-running task safely.
-- [ ] **Run preflight once during a complete installation.** Extract reusable
-  stage plays so `site.yml` performs preflight once while standalone stage
-  entry points retain their checks.
-- [ ] **Support existing HTTPS certificates.** Allow operators to supply a
-  certificate chain and private key instead of generating a private CA and
-  server certificate. Validate the certificate and hostname, configure NGINX
-  and backend Java trust appropriately, and document certificate renewal and
-  reload responsibilities.
-- [ ] **Provide a reusable installation and convergence test runner.** Accept
-  inventory and deployment settings, run installation and an unchanged rerun,
-  compare service process/start/restart state and perform authenticated checks.
-  Preserve timestamped logs, exit codes and the exact tested source manifest.
-  Keep credentials and personal lab paths outside the repository; distinguish
-  fresh-install validation from checks against an existing managed host.
-- [ ] **Define Java trust-store refresh behavior.** Incorporate system CA
-  updates into the backend-specific trust store while preserving and verifying
-  the installation CA. Define when a backend restart is required and verify
-  that unchanged runs do not rebuild the store or restart services.
+- [Operations and advanced installation](docs/operations.md) — 1 GB profile, preflight, long builds, logs, repeat runs and limitations.
+- [Developer notes](docs/development.md) — tests, playbook organization, generated artifacts and developer workflows.
+- [Improvement backlog](docs/roadmap.md) — outstanding work and previously completed changes.
