@@ -36,8 +36,10 @@ jobs:
       - name: Check playbook syntax for both resource profiles
         run: |
           for profile in standard pi_1gb_experimental; do
-            "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
-              site.yml --syntax-check -e "tms_resource_profile=$profile" || exit
+            for playbook in site build database https keycloak backend; do
+              "$TMS_CONTROLLER_DIR/venv/bin/ansible-playbook" -i examples/inventory.yml \
+                "$playbook.yml" --syntax-check -e "tms_resource_profile=$profile" || exit
+            done
           done
 
       - name: Check shell syntax

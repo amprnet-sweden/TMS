@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,14 @@ def load(name, path):
 
 
 class ProgressTests(unittest.TestCase):
+    def test_extracted_stage_paths_keep_their_progress_phase(self):
+        module = load('stage_progress_callback', ROOT / 'callback_plugins/tms_progress.py')
+        for stage, phase in (('build', 'prerequisites'), ('database', 'database'), ('https', 'https'),
+                             ('keycloak', 'keycloak'), ('backend', 'application')):
+            with self.subTest(stage=stage):
+                task = SimpleNamespace(tags=[], _role=None, get_path=lambda: f'/installer/{stage}-stage.yml:4')
+                self.assertEqual(module.phase_for(task), phase)
+
     def playbook(self, tasks, *, callback='tms_progress', connection='local', variables=None, role_files=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

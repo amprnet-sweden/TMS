@@ -80,7 +80,7 @@ def main():
     temporary.replace(destination)
 
     recipe = hashlib.sha256()
-    recipe_files = [ansible / "build.yml", ansible / "vars/resources.yml",
+    recipe_files = [ansible / "build.yml", ansible / "build-stage.yml", ansible / "vars/resources.yml",
                     ansible / "vars/build.yml", ansible / "vars/common.yml", Path(__file__).resolve()]
     recipe_files += [path for role in ("build", "build_tools")
                      for path in (ansible / "roles" / role).rglob("*")
