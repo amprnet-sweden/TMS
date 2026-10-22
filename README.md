@@ -692,6 +692,23 @@ Access TMS on https://tms.mydomain.se/tms
 You should be redirected to the login page (provided by Keycloak).
 And once you logged in you should be presented with the TMS dashboard.
 
+# Configuration
+
+This section describes the configuration parameters for TMS
+
+You can set the address from which the map fetches it's tiles.
+And also set the default zoom level and where to center the map.
+```
+tms:
+  frontend:
+    map:
+      tiles: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      zoom: 12
+      center:
+        lat: 59.328893
+        lng: 18.162247
+```
+
 # REST API
 
 **NOTE** The following instructions are accessing the "backend for frontend" API of TMS.
