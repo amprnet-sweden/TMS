@@ -28,7 +28,9 @@ Builds skip Docker-dependent backend tests. No Docker installation is required.
 The configured DNS hostname must resolve to the target from browsers. The
 HTTPS port must be reachable and identical externally and on the target; do
 not remap it through NAT. The playbook maps that hostname to loopback inside
-the target. Configure HTTP redirect, public certificate issuance and firewall
+the target. If the Debian cloud-init hosts template is present, the installer
+also adds that mapping to the template so it survives hosts-file regeneration
+at reboot. Configure HTTP redirect, public certificate issuance and firewall
 rules separately if required; the installer does not manage them.
 
 The installer creates a private CA restricted to that hostname. Import the

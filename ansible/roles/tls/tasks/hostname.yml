@@ -1,0 +1,20 @@
+---
+# Debian cloud-init can regenerate /etc/hosts on every boot. Preserve its
+# template header and Jinja expressions; add only our managed literal entry.
+- name: Inspect the Debian cloud-init hosts template
+  ansible.builtin.stat:
+    path: /etc/cloud/templates/hosts.debian.tmpl
+  register: tls_cloud_hosts_template
+
+- name: Preserve the installation hostname in the existing cloud-init template
+  ansible.builtin.blockinfile:
+    path: /etc/cloud/templates/hosts.debian.tmpl
+    marker: '# {mark} TMS Ansible installation hostname'
+    block: '127.0.0.1 {{ tms_hostname }}'
+  when: tls_cloud_hosts_template.stat.exists
+
+- name: Map the canonical installation hostname inside the guest
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: '# {mark} TMS Ansible installation hostname'
+    block: '127.0.0.1 {{ tms_hostname }}'
