@@ -34,11 +34,8 @@
       - "{{ tms_tls_directory }}/server.crt"
   changed_when: false
 
-- name: Map the canonical installation hostname inside the guest
-  ansible.builtin.blockinfile:
-    path: /etc/hosts
-    marker: '# {mark} TMS Ansible installation hostname'
-    block: '127.0.0.1 {{ tms_hostname }}'
+- name: Preserve the canonical hostname across guest reboots
+  ansible.builtin.import_tasks: hostname.yml
 
 - name: Create a backend-specific copy of the Java trust store
   ansible.builtin.copy:
