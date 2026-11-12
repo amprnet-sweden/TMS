@@ -1,0 +1,20 @@
+= Användarguide
+TMS
+Version 2026.11.12
+:description: Användarguide för TMS
+:docinfo: shared
+:icons: font
+:toc: left
+:toclevels: 3
+:toc-title: Innehållsförteckning
+:figure-caption: Bild
+:table-caption: Tabell
+:numbered:
+:nofooter:
+:imagesdir: ./images
+
+== Kom igång
+
+== Skapa sambandsuppdrag
+
+== Bemanna sambandsuppdrag
