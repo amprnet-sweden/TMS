@@ -33,7 +33,9 @@ Det finns flera TMS-instanser.
 
 TMS kan snurra på allt från en kraftfull server till en batteridriven enkortsdator.
 
-För att testa, logga in med amprid på sidan https://tms.sk0tm.amprnet.se/tms som snurrar på en RPi3B. Kommer du inte in för att du inte är behörig kontakta Björn
+För att testa, logga in med amprid på sidan https://tms.sk0tm.amprnet.se/tms som snurrar på en RPi3B. 
+
+Om du inte kan logga in, för att du inte är behörig, kontakta Björn
 
 Välj ett uppdrag och klicka på ärenden så att du får upp uppdragets ärendelista.
 
