@@ -1,0 +1,31 @@
+= Användarguide
+TMS
+Version 2026.11.16
+:description: BPINTRO
+:docinfo: shared
+:icons: font
+cat:toc: left
+:toclevels: 3
+:toc-title: Intro
+:figure-caption: Bild
+:table-caption: Tabell
+:numbered:
+:nofooter:
+:imagesdir: ./images
+
+== Vad är TMS
+TMS är en förkortning av "Ticket Management Systems"
+TMS är ett ärendehanteringssystem som stöder samarbete mellan insatsgrupper som samverkar i olika roller under ett uppdrag för en uppdragsgivare, tex en kommun som av någon anledning måste öppna upp en trygghetspunkt.
+Exempel på insatsgrupper är ledning, sjukvård, transport, vatten,...
+Ett uppdrag kan ha olika längd i tid, timmar, dagar, veckor...
+Ärenden som behöver dokumenteras och följas upp kan uppkomma i diskussioner på plats eller i kommunikation över olika medier.
+Ärendet skapas som ett ärende och följs upp med noteringar inom ett viss ärende. Ärendet delegeras till en ansvarig som ska se till att ärendet behandlas till det är klart att stänga. Den ansvarige kan delegera vidare men måste ändå bevaka delegeringen. 
+== Hur kommer jag åt TMS?
+
+Det finns flera TMS-instanser. TMS kan snurra på allt från en kraftfull server till en batteridriven enkortsdator.
+För att testa, logga in med amprid på sidan https://tms.sk0tm.amprnet.se/tms som snurrar på en RPi3B. Kommer du inte in för att du inte är behörig kontakta Björn
+Välj ett uppdrag och klicka på ärenden så att du får upp uppdragets ärendelista.
+Klicka på ett ärende i ärendelistan 
+
+== Bemanna sambandsuppdrag
+ls
