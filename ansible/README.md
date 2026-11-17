@@ -1,9 +1,9 @@
 # Install TMS with Ansible
 
-Install TMS on a **dedicated Debian 13 ARM64** machine using Ansible.
+Install TMS on a **dedicated Debian 13 ARM64 or Ubuntu 26.04 x86_64** machine using Ansible.
 The installer sets up the application, MariaDB, Keycloak and HTTPS with NGINX.
 
-**Requirements:** A fresh Debian 13 ARM64 target with SSH, Python 3 and a sudo-capable account; a Linux or WSL controller with Git, Python 3 and pip; SSH key access from controller to target. The standard installation requires **4 GiB RAM**. A [1 GB experimental profile](docs/operations.md#experimental-1-gb-arm64-profile) is also available.
+**Requirements:** A fresh target on one of the supported OS/architecture combinations with SSH, Python 3 and a sudo-capable account; a Linux or WSL controller with Git, Python 3 and pip; SSH key access from controller to target. The standard installation requires **4 GiB RAM**. An [experimental low-memory profile](docs/operations.md#experimental-1-gb-arm64-profile) is also available.
 
 > **Important:** Use a fresh machine. The installer will not adopt existing unmanaged MariaDB, Keycloak, NGINX or TMS installations, and it manages the entire NGINX configuration. Each deployment supports one target.
 

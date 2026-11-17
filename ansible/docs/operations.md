@@ -9,6 +9,13 @@ Application builds run under an unprivileged account; services use separate
 accounts. Databases and application listeners bind to loopback. NGINX provides
 HTTPS, including WebSocket forwarding.
 
+Supported targets are Debian 13 ARM64 and Ubuntu 26.04 x86_64. Ubuntu 26.04
+defaults to sudo-rs; the installer selects `/usr/bin/sudo.ws` from the `sudo`
+package for Ansible privilege escalation, preserving an explicitly configured
+`ansible_become_exe`. Keep that package installed on the target.
+MariaDB configuration candidates are validated through a temporary root-owned
+copy under `/etc/mysql` on Ubuntu, so its AppArmor profile remains enabled.
+
 Installation and functional checks passed on an emulated ARM64 VM and a physical
 1 GB Raspberry Pi 3 using the experimental profile. Historical Pi validation
 covered on-target builds, API/STOMP checks, unchanged reruns, browser login/logout,
@@ -28,7 +35,8 @@ Builds skip Docker-dependent backend tests. No Docker installation is required.
 The configured DNS hostname must resolve to the target from browsers. The
 HTTPS port must be reachable and identical externally and on the target; do
 not remap it through NAT. The playbook maps that hostname to loopback inside
-the target. If the Debian cloud-init hosts template is present, the installer
+the target. If the Debian-style cloud-init hosts template is present (on Debian
+or Ubuntu), the installer
 also adds that mapping to the template so it survives hosts-file regeneration
 at reboot. Configure HTTP redirect, public certificate issuance and firewall
 rules separately if required; the installer does not manage them.
@@ -53,6 +61,8 @@ bootstrap administrator is removed after permanent administrator verification.
 To install on a 1 GB Debian 13 ARM64 host, explicitly add
 `"tms_resource_profile": "pi_1gb_experimental"` to deployment.json.
 Omitting this setting selects `standard` and retains the 4 GB requirement.
+The same explicitly selected profile can be used on Ubuntu 26.04 x86_64;
+the `pi_1gb_experimental` name is retained for existing deployment files.
 The experimental profile requires at least 850 MiB usable RAM and uses
 256 MiB heaps for each Java service, one Gradle worker, bounded build heaps,
 and a smaller MariaDB buffer pool. JVM native memory is additional to heap.
@@ -116,9 +126,15 @@ bash install.sh inventory.yml deployment.json 2>&1 | tee installation.log
 ```
 
 Application builds retain the one-hour async deadline and 15-second polling;
-Keycloak retains its 30-minute deadline. Package and readiness timeouts are
+Keycloak runtime optimization retains its 30-minute deadline. Package and readiness timeouts are
 unchanged. Status reporting does not start extra remote jobs or restart services.
 Unchanged application artifacts still skip their builds, including log writes.
+
+The Keycloak HTTPS readiness check allows 120 attempts with 10-second delays.
+Initial database migration on slow storage can outlast this wait while the
+service continues running. Inspect the service journal and database migration
+progress. Once a progressing migration finishes and Keycloak is ready, rerun
+the installer with the same settings and original controller credentials.
 
 Gradle/npm builds write private, bounded status files on the target, under
 `<tms_build_root>/backend/<backend_fingerprint>/backend/build-status.log` and
