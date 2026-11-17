@@ -56,6 +56,13 @@ Use `tms-admin` instead for `<public-origin>/auth/admin/master/console/`.
 These are application accounts, separate from the SSH account. The temporary
 bootstrap administrator is removed after permanent administrator verification.
 
+If you change `tms-admin` or `appuser` in Keycloak, update the corresponding
+`tms_keycloak_admin_password` or `tms_keycloak_operator_password` in the original
+encrypted controller vault before rerunning the installer. These login passwords
+must be nonempty strings; their policy is managed in Keycloak. Existing user
+passwords are preserved during installation. Generated database, bootstrap and
+backend lookup credentials retain their separate validation requirements.
+
 ## Experimental 1 GB ARM64 profile
 
 To install on a 1 GB Debian 13 ARM64 host, explicitly add

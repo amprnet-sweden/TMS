@@ -18,8 +18,14 @@
       loop:
         - "{{ tms_keycloak_database_password }}"
         - "{{ tms_keycloak_bootstrap_password }}"
-        - "{{ tms_keycloak_admin_password }}"
         - "{{ tms_keycloak_lookup_password }}"
+      no_log: true
+    - name: Require nonempty Keycloak login passwords
+      ansible.builtin.assert:
+        that:
+          - item is string and item | length > 0
+      loop:
+        - "{{ tms_keycloak_admin_password }}"
         - "{{ tms_keycloak_operator_password }}"
       no_log: true
   roles:
