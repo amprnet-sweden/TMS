@@ -118,10 +118,10 @@
     - "{{ tms_toolchain_directory }}"
     - "{{ tms_build_cache_directory }}"
 
-- name: Download the pinned Node ARM64 distribution and verify its checksum
+- name: Download the pinned Node distribution for the target and verify its checksum
   ansible.builtin.get_url:
-    url: "https://nodejs.org/dist/v{{ tms_node_version }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
-    dest: "{{ tms_build_cache_directory }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    url: "https://nodejs.org/dist/v{{ tms_node_version }}/{{ tms_node_distribution }}.tar.xz"
+    dest: "{{ tms_build_cache_directory }}/{{ tms_node_distribution }}.tar.xz"
     checksum: "sha256:{{ tms_node_sha256 }}"
     owner: root
     group: root
@@ -130,7 +130,7 @@
 
 - name: Extract the pinned Node distribution
   ansible.builtin.unarchive:
-    src: "{{ tms_build_cache_directory }}/node-v{{ tms_node_version }}-linux-arm64.tar.xz"
+    src: "{{ tms_build_cache_directory }}/{{ tms_node_distribution }}.tar.xz"
     dest: "{{ tms_toolchain_directory }}"
     remote_src: true
     owner: root

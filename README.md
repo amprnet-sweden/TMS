@@ -182,7 +182,7 @@ For the *Role Base Security* to work you must ensure that **Add to userinfo** is
 
 ## Native installation with Ansible
 
-For a dedicated Debian 13 ARM64 host, see the [Ansible installer](ansible/README.md).
+For a dedicated Debian 13 ARM64 or Ubuntu 26.04 x86_64 host, see the [Ansible installer](ansible/README.md).
 It builds and installs the application, database, identity service and HTTPS proxy.
 The guide covers installation, resource profiles, validation and operational limits.
 

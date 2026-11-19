@@ -17,7 +17,11 @@
       loop:
         - "{{ tms_database_password }}"
         - "{{ tms_keycloak_lookup_password }}"
-        - "{{ tms_keycloak_operator_password }}"
+      no_log: true
+    - name: Require a nonempty TMS login password
+      ansible.builtin.assert:
+        that:
+          - tms_keycloak_operator_password is string and tms_keycloak_operator_password | length > 0
       no_log: true
   roles:
     - backend

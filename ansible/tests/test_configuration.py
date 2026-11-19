@@ -43,6 +43,7 @@ class ConfigurationTests(unittest.TestCase):
         self.values = {}
         for filename in ('common', 'build'):
             self.values.update(trusted(self.loader.load_from_file(str(ROOT / f'vars/{filename}.yml'))))
+        self.values['ansible_facts'] = {'architecture': 'aarch64'}
 
     def tasks(self, role):
         def load(path):
@@ -80,6 +81,78 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 source.require_java_version('JavaLanguageVersion.of(17)', version)
         source.require_java_version((ROOT.parent / 'backend/build.gradle').read_text(), self.values['tms_java_version'])
+
+    def test_toolchains_select_matching_target_paths_downloads_and_checksums(self):
+        download = next(t['ansible.builtin.get_url'] for t in self.tasks('build_tools')
+                        if 'ansible.builtin.get_url' in t)
+        extract = next(t['ansible.builtin.unarchive'] for t in self.tasks('build_tools')
+                       if 'ansible.builtin.unarchive' in t)
+        for architecture, java, node, checksum in (
+                ('aarch64', 'arm64', 'arm64', 'a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f'),
+                ('x86_64', 'amd64', 'x64', 'df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de')):
+            with self.subTest(architecture=architecture):
+                values = {'ansible_facts': {'architecture': architecture}}
+                distribution = f'node-v{self.values["tms_node_version"]}-linux-{node}'
+                self.assertEqual(self.render(self.values['tms_java_home'], **values),
+                                 f'/usr/lib/jvm/java-{self.values["tms_java_version"]}-openjdk-{java}')
+                self.assertEqual(self.render(self.values['tms_node_home'], **values),
+                                 f'/opt/tms-toolchains/{distribution}')
+                self.assertEqual(self.render(download['url'], **values),
+                                 f'https://nodejs.org/dist/v{self.values["tms_node_version"]}/{distribution}.tar.xz')
+                self.assertEqual(self.render(download['checksum'], **values), f'sha256:{checksum}')
+                self.assertEqual(self.render(download['dest'], **values),
+                                 self.render(extract['src'], **values))
+
+    def test_preflight_accepts_only_supported_os_architecture_pairs_and_memory(self):
+        play = trusted(self.loader.load_from_file(str(ROOT / 'preflight.yml'))[0])
+        gate = next(t for t in play['tasks'] if t['name'] == 'Require the selected operating system and architecture')
+        for distribution, major, version, architecture, expected in (
+                ('Debian', '13', '13.7', 'aarch64', True),
+                ('Ubuntu', '26', '26.04', 'x86_64', True),
+                ('Ubuntu', '20', '20.04', 'x86_64', False),
+                ('Ubuntu', '26', '26.10', 'x86_64', False),
+                ('Ubuntu', '26', '26.04', 'aarch64', False),
+                ('Debian', '13', '13.7', 'x86_64', False),
+                ('Debian', '12', '12.0', 'aarch64', False),
+                ('Ubuntu', '26', '26.04', 'armv7l', False)):
+            for minimum in (850, 3500):
+                for memory in (minimum - 1, minimum):
+                    with self.subTest(distribution=distribution, version=version, architecture=architecture,
+                                      minimum=minimum, memory=memory):
+                        facts = dict(distribution=distribution, distribution_major_version=major,
+                                     distribution_version=version, architecture=architecture, memtotal_mb=memory)
+                        values = dict(ansible_facts=facts, groups={'tms': ['target']},
+                                      tms_resources={'minimum_memory_mb': minimum})
+                        self.assertEqual(self.allowed(gate, **values), expected and memory >= minimum)
+        self.assertFalse(self.allowed(gate, groups={'tms': ['first', 'second']},
+                                     ansible_facts=dict(distribution='Ubuntu', distribution_major_version='26',
+                                                        distribution_version='26.04', architecture='x86_64',
+                                                        memtotal_mb=4096),
+                                     tms_resources={'minimum_memory_mb': 3500}))
+
+    def test_ubuntu_sudo_selection_preserves_debian_and_inventory_overrides(self):
+        play = trusted(self.loader.load_from_file(str(ROOT / 'preflight.yml'))[0])
+        selection = next(t for t in play['tasks'] if t['name'].startswith('Select traditional sudo'))
+        for distribution, explicit, expected in (
+                ('Ubuntu', False, True), ('Ubuntu', True, False),
+                ('Debian', False, False), ('Debian', True, False)):
+            values = {'ansible_facts': {'distribution': distribution}}
+            if explicit:
+                values['ansible_become_exe'] = '/custom/sudo'
+            templar = Templar(loader=self.loader, variables=values)
+            self.assertEqual(all(templar.evaluate_expression(c) for c in selection['when']), expected)
+        self.assertEqual(selection['ansible.builtin.set_fact']['ansible_become_exe'], '/usr/bin/sudo.ws')
+
+    def test_mariadb_validation_keeps_debian_command_and_ubuntu_confinement(self):
+        tasks = self.tasks('database')
+        helper = next(t for t in tasks if t['name'].startswith('Install the Ubuntu AppArmor-compatible'))
+        template = next(t['ansible.builtin.template'] for t in tasks if 'ansible.builtin.template' in t)
+        for distribution, expected in (
+                ('Debian', '/usr/sbin/mariadbd --defaults-file=%s --verbose --help'),
+                ('Ubuntu', '/usr/bin/python3 /usr/local/sbin/tms-validate-mariadb %s')):
+            values = {'ansible_facts': {'distribution': distribution}}
+            self.assertEqual(self.render(template['validate'], **values), expected)
+            self.assertEqual(Templar(variables=values).evaluate_expression(helper['when']), distribution == 'Ubuntu')
 
     def test_custom_build_root_is_escaped_in_artifact_checks(self):
         build_root = '/custom/build.[1]'

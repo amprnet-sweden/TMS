@@ -72,6 +72,15 @@
     update_cache: true
     cache_valid_time: 86400
 
+- name: Install the Ubuntu AppArmor-compatible MariaDB configuration validator
+  ansible.builtin.copy:
+    src: validate-mariadb.py
+    dest: /usr/local/sbin/tms-validate-mariadb
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_facts['distribution'] == 'Ubuntu'
+
 - name: Configure the database to listen only on IPv4 loopback
   ansible.builtin.template:
     src: native.cnf.j2
@@ -79,7 +88,10 @@
     owner: root
     group: root
     mode: '0644'
-    validate: /usr/sbin/mariadbd --defaults-file=%s --verbose --help
+    validate: >-
+      {{ '/usr/bin/python3 /usr/local/sbin/tms-validate-mariadb %s'
+         if ansible_facts['distribution'] == 'Ubuntu'
+         else '/usr/sbin/mariadbd --defaults-file=%s --verbose --help' }}
   notify: Restart MariaDB
 
 - name: Enable MariaDB at boot and start it

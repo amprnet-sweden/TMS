@@ -19,11 +19,24 @@
       ansible.builtin.assert:
         that:
           - groups['tms'] | length == 1
-          - ansible_facts['distribution'] == 'Debian'
-          - ansible_facts['distribution_major_version'] == '13'
-          - ansible_facts['architecture'] == 'aarch64'
+          - >-
+            (ansible_facts['distribution'] == 'Debian' and
+             ansible_facts['distribution_major_version'] == '13' and
+             ansible_facts['architecture'] == 'aarch64') or
+            (ansible_facts['distribution'] == 'Ubuntu' and
+             ansible_facts['distribution_version'] == '26.04' and
+             ansible_facts['architecture'] == 'x86_64')
           - ansible_facts['memtotal_mb'] >= tms_resources.minimum_memory_mb
-        fail_msg: "Debian 13 ARM64 and at least {{ tms_resources.minimum_memory_mb }} MiB RAM are required for this profile."
+        fail_msg: "Debian 13 ARM64 or Ubuntu 26.04 x86_64 and at least {{ tms_resources.minimum_memory_mb }} MiB RAM are required for this profile."
+
+    # Ubuntu 26.04 defaults to sudo-rs, whose prompt differs from the sudo
+    # plugin's expected marker. The sudo package also provides sudo.ws.
+    - name: Select traditional sudo on Ubuntu unless explicitly configured
+      ansible.builtin.set_fact:
+        ansible_become_exe: /usr/bin/sudo.ws
+      when:
+        - ansible_facts['distribution'] == 'Ubuntu'
+        - ansible_become_exe is not defined
 
     - name: Verify privilege escalation without changing the guest
       ansible.builtin.command: /usr/bin/id -u
