@@ -18,3 +18,17 @@ Version 2026.11.12
 == Skapa sambandsuppdrag
 
 == Bemanna sambandsuppdrag
+
+== Ärenden
+
+=== Översikt
+
+Ett ärende innehåller följande attribut:
+
+- Beskrivning
+- Insatsgrupp
+- Ansvarig
+- Status
+- Prioritet
+- Noteringar
+- Karta
